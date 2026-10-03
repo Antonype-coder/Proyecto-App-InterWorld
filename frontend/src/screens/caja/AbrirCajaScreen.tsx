@@ -84,7 +84,6 @@ export default function AbrirCajaScreen(): React.ReactElement {
             control={control}
             name="notas_apertura"
             label="Notas"
-            placeholder="Ej: Recibí caja del turno anterior"
             multiline
           />
         </Card>

@@ -87,11 +87,12 @@ export default function ProductoScannerScreen(): React.ReactElement {
 
   const cerrar = (): void => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (origen === 'formulario') {
-      navigation.navigate('Productos');
-    } else {
+    if (origen === 'formulario' && navigation.canGoBack()) {
       navigation.goBack();
+      return;
     }
+
+    navigation.navigate(origen === 'formulario' ? 'Productos' : 'Vender');
   };
 
   const buscarProductoEscaneado = useCallback(
@@ -333,6 +334,8 @@ export default function ProductoScannerScreen(): React.ReactElement {
             onPress={cerrar}
             hitSlop={20}
             style={styles.backBtnGlass}
+            accessibilityRole="button"
+            accessibilityLabel="Volver"
           >
             <MaterialCommunityIcons
               name="arrow-left"
@@ -430,6 +433,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     zIndex: 10,
+    elevation: 10,
   },
   headerRow: {
     flexDirection: 'row',
@@ -445,6 +449,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    zIndex: 11,
+    elevation: 11,
   },
   headerTitleGlass: {
     ...typography.h3,

@@ -176,6 +176,27 @@ export default function DashboardScreen(): React.ReactElement {
                   Ticket promedio{' '}
                   {formatCurrency(data.kpis.ticket_promedio.valor)}
                 </Text>
+                <View style={styles.gananciaRow}>
+                  <View style={styles.gananciaInfo}>
+                    <Text style={styles.gananciaLabel}>
+                      Ganancia bruta estimada
+                    </Text>
+                    <Text style={styles.gananciaSub}>
+                      Margen {data.kpis.ganancias_periodo.margen_porcentaje}% ·
+                      según costo de compra actual
+                    </Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.gananciaValue,
+                      parseFloat(data.kpis.ganancias_periodo.monto) < 0
+                        ? styles.gananciaNegativa
+                        : null,
+                    ]}
+                  >
+                    {formatCurrency(data.kpis.ganancias_periodo.monto)}
+                  </Text>
+                </View>
               </View>
 
               <View style={styles.kpiGrid}>
@@ -686,6 +707,20 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: spacing.sm,
   },
+  gananciaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    marginTop: spacing.md,
+    paddingTop: spacing.md,
+  },
+  gananciaInfo: { flex: 1 },
+  gananciaLabel: { ...typography.bodyBold, color: colors.textPrimary },
+  gananciaSub: { ...typography.tiny, color: colors.textMuted, marginTop: 3 },
+  gananciaValue: { ...typography.bodyBold, color: colors.success },
+  gananciaNegativa: { color: colors.danger },
 
   changeBadge: {
     flexDirection: 'row',
@@ -706,7 +741,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   kpiCard: {
-    width: '48%',
+    flexBasis: '48%',
+    flexGrow: 1,
     backgroundColor: colors.surface,
     borderRadius: radius.lg,
     borderWidth: 1,

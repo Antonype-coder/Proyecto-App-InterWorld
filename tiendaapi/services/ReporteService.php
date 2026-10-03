@@ -152,6 +152,7 @@ if (!class_exists('ReporteService')) {
         );
         $ventasActual = $this->ventasResumen($desde, $hasta);
         $ventasAnterior = $this->ventasResumen($desdeAnt, $hastaAnt);
+        $gananciasPeriodo = $this->gananciasPeriodo($desde, $hasta);
 
         return [
             'periodo' => [
@@ -170,6 +171,7 @@ if (!class_exists('ReporteService')) {
                     ),
                 ],
                 'ticket_promedio' => $this->ticketPromedio($desde, $hasta),
+                'ganancias_periodo' => $gananciasPeriodo,
                 'productos_activos' => $this->contarProductosActivos(),
                 'alertas_stock' => $this->contarAlertasStock(),
                 'cartera_total' => $this->calcularCartera(),
@@ -181,6 +183,44 @@ if (!class_exists('ReporteService')) {
             'top_productos' => $this->productosMasVendidos(5, $desde, $hasta),
             'caja_abierta' => $this->cajaAbiertaActual(),
             'ultimas_ventas' => $this->ultimasVentas(5),
+        ];
+    }
+
+    private function gananciasPeriodo(string $desde, string $hasta): array
+    {
+        $stmt = $this->db->prepare(
+            "SELECT
+                COALESCE((
+                    SELECT SUM(v.total)
+                    FROM ventas v
+                    WHERE v.estado = 'completada'
+                      AND DATE(v.created_at) BETWEEN :ventas_desde AND :ventas_hasta
+                ), 0) AS ventas,
+                COALESCE((
+                    SELECT SUM(vd.cantidad * p.precio_compra)
+                    FROM venta_detalle vd
+                    INNER JOIN ventas v ON v.id = vd.venta_id
+                    INNER JOIN productos p ON p.id = vd.producto_id
+                    WHERE v.estado = 'completada'
+                      AND DATE(v.created_at) BETWEEN :costo_desde AND :costo_hasta
+                ), 0) AS costo"
+        );
+        $stmt->execute([
+            'ventas_desde' => $desde,
+            'ventas_hasta' => $hasta,
+            'costo_desde' => $desde,
+            'costo_hasta' => $hasta,
+        ]);
+        $row = $stmt->fetch() ?: ['ventas' => 0, 'costo' => 0];
+
+        $ventas = (float) $row['ventas'];
+        $ganancia = $ventas - (float) $row['costo'];
+
+        return [
+            'monto' => number_format($ganancia, 2, '.', ''),
+            'margen_porcentaje' => $ventas > 0
+                ? round(($ganancia / $ventas) * 100, 2)
+                : 0,
         ];
     }
 

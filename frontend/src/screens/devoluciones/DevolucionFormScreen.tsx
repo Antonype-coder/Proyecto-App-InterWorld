@@ -208,7 +208,6 @@ export default function DevolucionFormScreen(): React.ReactElement {
           <Text style={styles.sectionTitle}>Motivo de la devolución</Text>
           <Input
             label="Motivo"
-            placeholder="Ej: Producto defectuoso, cambio de opinión..."
             value={motivo}
             onChangeText={setMotivo}
             multiline

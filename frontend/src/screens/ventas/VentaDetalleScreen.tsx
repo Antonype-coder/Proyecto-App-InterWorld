@@ -277,7 +277,6 @@ export default function VentaDetalleScreen(): React.ReactElement {
         </Text>
         <Input
           label="Motivo"
-          placeholder="Ej: Error en el cobro"
           value={motivo}
           onChangeText={setMotivo}
           multiline

@@ -301,7 +301,6 @@ export default function UsuariosScreen(): React.ReactElement {
       >
         <Input
           label="Nombre completo"
-          placeholder="Juan Pérez"
           icon="account-outline"
           value={nombre}
           onChangeText={setNombre}
@@ -309,7 +308,6 @@ export default function UsuariosScreen(): React.ReactElement {
         />
         <Input
           label="Correo"
-          placeholder="usuario@tienda.com"
           keyboardType="email-address"
           autoCapitalize="none"
           icon="email-outline"

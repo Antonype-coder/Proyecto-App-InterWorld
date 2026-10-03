@@ -1,6 +1,7 @@
 import React from 'react';
 import { Control, Controller, FieldValues, Path } from 'react-hook-form';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { formatNumericInput, parseNumericInput } from '@utils/format';
 import Input from '../ui/Input';
 
 interface FormNumberInputProps<T extends FieldValues> {
@@ -36,13 +37,8 @@ export default function FormNumberInput<T extends FieldValues>({
           icon={icon}
           required={required}
           helper={helper}
-          value={value !== undefined && value !== null ? String(value) : ''}
-          onChangeText={(text) => {
-            const cleaned = integer
-              ? text.replace(/[^0-9]/g, '')
-              : text.replace(/[^0-9.,]/g, '').replace(',', '.');
-            onChange(cleaned);
-          }}
+          value={formatNumericInput(value !== undefined && value !== null ? String(value) : '', integer)}
+          onChangeText={(text) => onChange(parseNumericInput(text, integer))}
           onBlur={onBlur}
           error={error?.message}
         />

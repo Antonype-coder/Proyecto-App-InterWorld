@@ -93,7 +93,6 @@ export default function CerrarCajaScreen(): React.ReactElement {
             control={control}
             name="notas_cierre"
             label="Notas"
-            placeholder="Ej: Cerrado sin novedades"
             multiline
           />
         </Card>

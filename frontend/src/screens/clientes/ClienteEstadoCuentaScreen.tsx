@@ -29,6 +29,7 @@ import Loader from '@components/ui/Loader';
 import EmptyState from '@components/ui/EmptyState';
 import Modal from '@components/ui/Modal';
 import Input from '@components/ui/Input';
+import FormattedNumberInput from '@components/forms/FormattedNumberInput';
 import Toast from '@components/ui/Toast';
 import type { ToastVariant } from '@tipos/index';
 
@@ -362,10 +363,9 @@ export default function ClienteEstadoCuentaScreen(): React.ReactElement {
           </Text>
         </Text>
 
-        <Input
+        <FormattedNumberInput
           label="Monto"
           placeholder="0"
-          keyboardType="numeric"
           icon="currency-usd"
           value={montoPago}
           onChangeText={setMontoPago}

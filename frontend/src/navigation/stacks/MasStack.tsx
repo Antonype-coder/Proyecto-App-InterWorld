@@ -10,6 +10,11 @@ import NotificacionesScreen from '@screens/notificaciones/NotificacionesScreen';
 import ClientesListScreen from '@screens/clientes/ClientesListScreen';
 import ClienteFormScreen from '@screens/clientes/ClienteFormScreen';
 import ClienteEstadoCuentaScreen from '@screens/clientes/ClienteEstadoCuentaScreen';
+import CategoriasListScreen from '@screens/categorias/CategoriasListScreen';
+import CategoriaFormScreen from '@screens/categorias/CategoriaFormScreen';
+import ProveedoresListScreen from '@screens/proveedores/ProveedoresListScreen';
+import ProveedorFormScreen from '@screens/proveedores/ProveedorFormScreen';
+import ProveedorDetalleScreen from '@screens/proveedores/ProveedorDetalleScreen';
 import InventarioScreen from '@screens/inventario/InventarioScreen';
 import MovimientoFormScreen from '@screens/inventario/MovimientoFormScreen';
 import CajaScreen from '@screens/caja/CajaScreen';
@@ -44,6 +49,11 @@ export default function MasStack(): React.ReactElement {
         name="ClienteEstadoCuenta"
         component={ClienteEstadoCuentaScreen}
       />
+      <Stack.Screen name="Categorias" component={CategoriasListScreen} />
+      <Stack.Screen name="CategoriaForm" component={CategoriaFormScreen} />
+      <Stack.Screen name="Proveedores" component={ProveedoresListScreen} />
+      <Stack.Screen name="ProveedorForm" component={ProveedorFormScreen} />
+      <Stack.Screen name="ProveedorDetalle" component={ProveedorDetalleScreen} />
       <Stack.Screen name="Inventario" component={InventarioScreen} />
       <Stack.Screen name="MovimientoForm" component={MovimientoFormScreen} />
       <Stack.Screen name="Caja" component={CajaScreen} />

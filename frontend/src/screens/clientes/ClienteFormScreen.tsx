@@ -119,7 +119,6 @@ export default function ClienteFormScreen(): React.ReactElement {
             control={control}
             name="nombre"
             label="Nombre completo"
-            placeholder="Ej: Juan Pérez"
             icon="account-outline"
             required
           />
@@ -138,7 +137,6 @@ export default function ClienteFormScreen(): React.ReactElement {
             control={control}
             name="telefono"
             label="Teléfono"
-            placeholder="3001234567"
             keyboardType="phone-pad"
             icon="phone-outline"
           />
@@ -146,7 +144,6 @@ export default function ClienteFormScreen(): React.ReactElement {
             control={control}
             name="email"
             label="Correo electrónico"
-            placeholder="cliente@ejemplo.com"
             keyboardType="email-address"
             autoCapitalize="none"
             icon="email-outline"

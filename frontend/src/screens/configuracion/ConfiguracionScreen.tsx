@@ -17,6 +17,7 @@ import TopBar from '@components/layout/TopBar';
 import Card from '@components/ui/Card';
 import Button from '@components/ui/Button';
 import Input from '@components/ui/Input';
+import FormattedNumberInput from '@components/forms/FormattedNumberInput';
 import Switch from '@components/ui/Switch';
 import Loader from '@components/ui/Loader';
 import Toast from '@components/ui/Toast';
@@ -250,13 +251,11 @@ export default function ConfiguracionScreen(): React.ReactElement {
 
         {esAdmin ? <Card variant="default" style={styles.section}>
           <Text style={styles.sectionTitle}>Impuestos</Text>
-          <Input
+          <FormattedNumberInput
             label="Porcentaje de impuesto"
             icon="percent-outline"
-            keyboardType="numeric"
             value={impuesto}
             onChangeText={setImpuesto}
-            helper="Ej: 19 para IVA 19%"
           />
           <View style={styles.switchRow}>
             <View style={{ flex: 1 }}>

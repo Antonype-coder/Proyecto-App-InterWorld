@@ -7,7 +7,7 @@ import * as Haptics from 'expo-haptics';
 import { colors, radius, spacing, typography } from '@theme/index';
 import { ordenesCompraApi, proveedoresApi, productosApi } from '@api/index';
 import type { Proveedor, Producto } from '@tipos/index';
-import { formatCurrency } from '@utils/format';
+import { formatCurrency, formatNumericInput, parseNumericInput } from '@utils/format';
 import KeyboardScreen from '@components/layout/KeyboardScreen';
 import TopBar from '@components/layout/TopBar';
 import Card from '@components/ui/Card';
@@ -181,9 +181,11 @@ export default function OrdenCompraFormScreen(): React.ReactElement {
                       <Text style={styles.itemInputLabel}>Precio</Text>
                       <TextInput
                         style={styles.itemInputField}
-                        keyboardType="numeric"
-                        value={String(it.precio_unitario)}
-                        onChangeText={(t) => setPrecio(it.producto_id, parseFloat(t) || 0)}
+                        keyboardType="decimal-pad"
+                        value={formatNumericInput(String(it.precio_unitario))}
+                        onChangeText={(t) =>
+                          setPrecio(it.producto_id, Number(parseNumericInput(t)) || 0)
+                        }
                       />
                     </View>
                   </View>
@@ -198,7 +200,6 @@ export default function OrdenCompraFormScreen(): React.ReactElement {
 
         <Card variant="default" style={styles.section}>
           <Text style={styles.sectionTitle}>Fecha esperada</Text>
-          <Input label="Fecha" placeholder="YYYY-MM-DD" value={fechaEsperada} onChangeText={setFechaEsperada} />
         </Card>
 
         <Card variant="default" style={styles.section}>

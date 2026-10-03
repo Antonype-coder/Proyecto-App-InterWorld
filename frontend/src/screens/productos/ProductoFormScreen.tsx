@@ -63,6 +63,10 @@ export default function ProductoFormScreen(): React.ReactElement {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [fotos, setFotos] = useState<FotoProducto[]>([]);
+  const [modalCategoriaVisible, setModalCategoriaVisible] = useState(false);
+  const [savingCategoria, setSavingCategoria] = useState(false);
+  const [categoriaNombre, setCategoriaNombre] = useState('');
+  const [categoriaDescripcion, setCategoriaDescripcion] = useState('');
   const [modalProveedorVisible, setModalProveedorVisible] = useState(false);
   const [savingProveedor, setSavingProveedor] = useState(false);
   const [proveedorNombre, setProveedorNombre] = useState('');
@@ -304,6 +308,42 @@ export default function ProductoFormScreen(): React.ReactElement {
     }
   };
 
+  const crearCategoria = async (): Promise<void> => {
+    const nombre = categoriaNombre.trim();
+    if (nombre.length < 2) {
+      setToast({
+        visible: true,
+        message: 'Escribe el nombre de la categoría.',
+        variant: 'error',
+      });
+      return;
+    }
+
+    setSavingCategoria(true);
+    try {
+      const categoria = await categoriasApi.crear({
+        nombre,
+        descripcion: categoriaDescripcion.trim() || undefined,
+        activo: 1,
+      });
+      setCategorias((current) => [...current, categoria]);
+      setValue('categoria_id', categoria.id, { shouldDirty: true });
+      setCategoriaNombre('');
+      setCategoriaDescripcion('');
+      setModalCategoriaVisible(false);
+      setToast({
+        visible: true,
+        message: 'Categoría agregada y seleccionada.',
+        variant: 'success',
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'No se pudo agregar la categoría';
+      setToast({ visible: true, message: msg, variant: 'error' });
+    } finally {
+      setSavingCategoria(false);
+    }
+  };
+
   const crearProveedor = async (): Promise<void> => {
     const nombre = proveedorNombre.trim();
     if (nombre.length < 2) {
@@ -441,7 +481,6 @@ export default function ProductoFormScreen(): React.ReactElement {
                 control={control}
                 name="codigo_barras"
                 label="Código de barras"
-                placeholder="7501234567890"
                 icon="barcode"
                 required
               />
@@ -463,7 +502,6 @@ export default function ProductoFormScreen(): React.ReactElement {
             control={control}
             name="nombre"
             label="Nombre"
-            placeholder="Ej: Coca-Cola 400ml"
             icon="package-variant"
             required
           />
@@ -536,6 +574,14 @@ export default function ProductoFormScreen(): React.ReactElement {
             icon="shape-outline"
             options={categorias.map((c) => ({ id: c.id, nombre: c.nombre }))}
           />
+          <Button
+            label="Agregar categoría"
+            icon="plus-box-outline"
+            variant="ghost"
+            size="sm"
+            onPress={() => setModalCategoriaVisible(true)}
+            style={styles.addSupplierButton}
+          />
           <FormSearchPicker
             control={control}
             name="proveedor_id"
@@ -591,6 +637,46 @@ export default function ProductoFormScreen(): React.ReactElement {
         variant={toast.variant}
         onHide={() => setToast((t) => ({ ...t, visible: false }))}
       />
+      <Modal
+        visible={modalCategoriaVisible}
+        onClose={() => setModalCategoriaVisible(false)}
+        title="Nueva categoría"
+        scrollable
+        footer={
+          <View style={styles.modalActions}>
+            <Button
+              label="Cancelar"
+              variant="outline"
+              onPress={() => setModalCategoriaVisible(false)}
+              style={styles.modalButton}
+            />
+            <Button
+              label="Guardar"
+              loading={savingCategoria}
+              disabled={savingCategoria}
+              onPress={() => {
+                void crearCategoria();
+              }}
+              style={styles.modalButton}
+            />
+          </View>
+        }
+      >
+        <Input
+          label="Nombre de la categoría"
+          value={categoriaNombre}
+          onChangeText={setCategoriaNombre}
+          autoCapitalize="words"
+          required
+        />
+        <Input
+          label="Descripción"
+          value={categoriaDescripcion}
+          onChangeText={setCategoriaDescripcion}
+          multiline
+          numberOfLines={3}
+        />
+      </Modal>
       <Modal
         visible={modalProveedorVisible}
         onClose={() => setModalProveedorVisible(false)}

@@ -19,6 +19,7 @@ import TopBar from '@components/layout/TopBar';
 import Card from '@components/ui/Card';
 import Button from '@components/ui/Button';
 import Input from '@components/ui/Input';
+import FormattedNumberInput from '@components/forms/FormattedNumberInput';
 import Toast from '@components/ui/Toast';
 import type { ToastVariant } from '@tipos/index';
 
@@ -188,7 +189,7 @@ export default function PromocionFormScreen(): React.ReactElement {
       <View style={styles.content}>
         <Card variant="default" style={styles.section}>
           <Text style={styles.sectionTitle}>Información</Text>
-          <Input label="Nombre" placeholder="Ej: Promo Coca-Cola" value={nombre} onChangeText={setNombre} required />
+          <Input label="Nombre" value={nombre} onChangeText={setNombre} required />
           <Input label="Descripción" placeholder="Opcional" value={descripcion} onChangeText={setDescripcion} multiline />
         </Card>
 
@@ -206,9 +207,8 @@ export default function PromocionFormScreen(): React.ReactElement {
           </View>
 
           {(tipo === 'porcentaje' || tipo === 'monto_fijo' || tipo === 'precio_especial') ? (
-            <Input
+            <FormattedNumberInput
               label={tipo === 'porcentaje' ? 'Porcentaje (%)' : 'Valor ($)'}
-              keyboardType="numeric"
               value={valor}
               onChangeText={setValor}
             />
@@ -271,14 +271,12 @@ export default function PromocionFormScreen(): React.ReactElement {
           <Text style={styles.sectionTitle}>Vigencia</Text>
           <Input
             label="Fecha inicio"
-            placeholder="YYYY-MM-DD"
             value={fechaInicio}
             onChangeText={setFechaInicio}
             required
           />
           <Input
             label="Fecha fin"
-            placeholder="YYYY-MM-DD"
             value={fechaFin}
             onChangeText={setFechaFin}
             required

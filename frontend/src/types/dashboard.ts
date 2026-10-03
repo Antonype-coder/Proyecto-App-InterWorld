@@ -24,6 +24,11 @@ export interface TicketPromedio {
   valor: string;
 }
 
+export interface GananciasPeriodo {
+  monto: string;
+  margen_porcentaje: number;
+}
+
 export interface CarteraTotal {
   total: string;
   clientes: number;
@@ -78,6 +83,7 @@ export interface DashboardAvanzado {
     ventas_hoy: KpiResumen;
     ventas_periodo: VentasPeriodo;
     ticket_promedio: TicketPromedio;
+    ganancias_periodo: GananciasPeriodo;
     productos_activos: number;
     alertas_stock: number;
     cartera_total: CarteraTotal;

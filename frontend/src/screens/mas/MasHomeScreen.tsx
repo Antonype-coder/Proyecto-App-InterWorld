@@ -136,6 +136,18 @@ export default function MasHomeScreen(): React.ReactElement {
             onPress={() => ir('Clientes')}
           />
           <RowItem
+            icon="shape-outline"
+            label="Categorías"
+            sub="Administrar categorías de productos"
+            onPress={() => ir('Categorias')}
+          />
+          <RowItem
+            icon="truck-outline"
+            label="Proveedores"
+            sub="Gestionar proveedores y contactos"
+            onPress={() => ir('Proveedores')}
+          />
+          <RowItem
             icon="package-variant-closed"
             label="Inventario"
             sub="Movimientos y stock"

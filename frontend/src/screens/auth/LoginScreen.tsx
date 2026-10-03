@@ -101,7 +101,6 @@ export default function LoginScreen(): React.ReactElement {
                 render={({ field: { value, onChange, onBlur } }) => (
                   <Input
                     label="Correo electrónico"
-                    placeholder="tucorreo@ejemplo.com"
                     keyboardType="email-address"
                     autoCapitalize="none"
                     autoCorrect={false}

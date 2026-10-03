@@ -33,6 +33,7 @@ import {
 import type { Producto, Cliente, AppTabsParamList } from '@tipos/index';
 import { formatCurrency } from '@utils/format';
 import Input from '@components/ui/Input';
+import FormattedNumberInput from '@components/forms/FormattedNumberInput';
 import Button from '@components/ui/Button';
 import Modal from '@components/ui/Modal';
 import Toast from '@components/ui/Toast';
@@ -743,10 +744,9 @@ export default function POSScreen(): React.ReactElement {
         onClose={() => setModalDescuento(false)}
         title="Aplicar descuento"
       >
-        <Input
+        <FormattedNumberInput
           label="Monto de descuento"
           placeholder="0"
-          keyboardType="numeric"
           icon="currency-usd"
           value={descuentoInput}
           onChangeText={setDescuentoInput}

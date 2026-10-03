@@ -223,7 +223,6 @@ export default function MovimientoFormScreen(): React.ReactElement {
             control={control}
             name="motivo"
             label="Razón"
-            placeholder="Ej: Compra, merma, robo"
             multiline
             required
           />

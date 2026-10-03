@@ -100,6 +100,8 @@ export type {
   ProductosStackParamList,
   VentasStackParamList,
   ClientesStackParamList,
+  CategoriasStackParamList,
+  ProveedoresStackParamList,
   InventarioStackParamList,
   CajaStackParamList,
   ReportesStackParamList,

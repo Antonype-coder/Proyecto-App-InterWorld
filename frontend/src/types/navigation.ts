@@ -37,6 +37,17 @@ export type ClientesStackParamList = {
   ClienteEstadoCuenta: { clienteId: number };
 };
 
+export type CategoriasStackParamList = {
+  CategoriasList: undefined;
+  CategoriaForm: { categoriaId?: number } | undefined;
+};
+
+export type ProveedoresStackParamList = {
+  ProveedoresList: undefined;
+  ProveedorForm: { proveedorId?: number } | undefined;
+  ProveedorDetalle: { proveedorId: number };
+};
+
 export type InventarioStackParamList = {
   InventarioList: undefined;
   MovimientoForm: { productoId?: number } | undefined;
@@ -90,6 +101,11 @@ export type MasStackParamList = {
   OrdenCompraForm: undefined;
   OrdenCompraDetalle: { ocId: number };
   LealtadRanking: undefined;
+  Categorias: undefined;
+  CategoriaForm: { categoriaId?: number } | undefined;
+  Proveedores: undefined;
+  ProveedorForm: { proveedorId?: number } | undefined;
+  ProveedorDetalle: { proveedorId: number };
 };
 
 export type AppTabsParamList = {

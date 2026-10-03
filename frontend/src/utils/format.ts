@@ -26,6 +26,53 @@ export function formatNumber(value: number | string): string {
 }
 
 /**
+ * Formats a canonical numeric string for editing with Colombian separators.
+ */
+export function formatNumericInput(value: number | string, integer = false): string {
+  const raw = String(value ?? '');
+  const normalized = integer
+    ? raw.replace(/\D/g, '')
+    : raw.replace(/[^\d.]/g, '');
+  if (!normalized) return '';
+
+  const hasDecimal = !integer && normalized.includes('.');
+  const [whole = '', fraction = ''] = hasDecimal
+    ? normalized.split('.', 2)
+    : [normalized, ''];
+  const groupedWhole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+  return hasDecimal
+    ? `${groupedWhole},${fraction.slice(0, 2)}`
+    : groupedWhole;
+}
+
+/**
+ * Converts an editable number using either comma or dot decimals to a canonical string.
+ */
+export function parseNumericInput(value: string, integer = false): string {
+  const cleaned = value.replace(/[^\d.,]/g, '');
+  if (integer) return cleaned.replace(/\D/g, '');
+
+  const commaIndex = cleaned.lastIndexOf(',');
+  const dotIndex = cleaned.lastIndexOf('.');
+  const decimalIndex = commaIndex >= 0
+    ? commaIndex
+    : dotIndex >= 0 && (
+      dotIndex === cleaned.length - 1 ||
+      cleaned.length - dotIndex - 1 <= 2 &&
+      !/^\d{1,3}(?:\.\d{3})+$/.test(cleaned)
+    )
+      ? dotIndex
+      : -1;
+
+  if (decimalIndex < 0) return cleaned.replace(/\D/g, '');
+
+  const whole = cleaned.slice(0, decimalIndex).replace(/\D/g, '');
+  const fraction = cleaned.slice(decimalIndex + 1).replace(/\D/g, '').slice(0, 2);
+  return fraction ? `${whole}.${fraction}` : `${whole}.`;
+}
+
+/**
  * Formatea una fecha ISO en formato corto: "12 ene 2026".
  */
 export function formatDate(iso: string | null | undefined): string {
