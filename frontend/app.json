@@ -1,0 +1,54 @@
+{
+  "expo": {
+    "name": "Interworld",
+    "slug": "Interworld",
+    "version": "2.0.0",
+    "orientation": "portrait",
+    "scheme": "tiendaadmin",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.tiendaadmin.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Interworld usa la cámara para escanear códigos de barras de productos.",
+        "NSFaceIDUsageDescription": "Interworld usa Face ID para desbloqueo rápido."
+      }
+    },
+    "android": {
+      "package": "com.tiendaadmin.app",
+      "permissions": [
+        "CAMERA",
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT"
+      ]
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Interworld usa la cámara para escanear códigos de barras de productos.",
+          "microphonePermission": "Interworld usa el micrófono solo para funciones de audio.",
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
+      ],
+      "expo-local-authentication",
+      "expo-sharing",
+      "expo-image",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Interworld necesita acceso a tus fotos para agregarlas a los productos.",
+          "cameraPermission": "Interworld necesita la cámara para tomar fotos de los productos.",
+          "microphonePermission": false
+        }
+      ]
+    ]
+  }
+}

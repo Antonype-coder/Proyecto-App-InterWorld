@@ -1,0 +1,50 @@
+# ================================================================
+# Reglas de Apache para la API TiendaAdmin
+# ================================================================
+
+RewriteEngine On
+RewriteBase /tiendaapi/
+
+# ⚠️ IMPORTANTE: Preservar el header Authorization para PHP
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Servir únicamente imágenes creadas por Upload::image.
+RewriteCond %{REQUEST_FILENAME} -f
+RewriteRule ^storage/uploads/(productos|logo)/[0-9]{14}_[A-Fa-f0-9]{12}\.(jpg|jpeg|png|webp)$ - [NC,L]
+
+# Bloquear acceso directo a archivos sensibles
+<FilesMatch "\.(env|env\.example|sql|md|log|ini|json|lock)$">
+    Require all denied
+</FilesMatch>
+
+# Bloquear navegación directa a carpetas internas
+RewriteRule ^config/ - [F,L]
+RewriteRule ^core/ - [F,L]
+RewriteRule ^controllers/ - [F,L]
+RewriteRule ^database/ - [F,L]
+RewriteRule ^middleware/ - [F,L]
+RewriteRule ^models/ - [F,L]
+RewriteRule ^routes/ - [F,L]
+RewriteRule ^services/ - [F,L]
+RewriteRule ^storage/ - [F,L]
+RewriteRule ^utils/ - [F,L]
+RewriteRule ^vendor/ - [F,L]
+RewriteRule ^docs/ - [F,L]
+RewriteRule ^scripts/ - [F,L]
+
+# CORS de respaldo si mod_headers está activo
+<IfModule mod_headers.c>
+    Header always set Access-Control-Allow-Origin "*"
+    Header always set Access-Control-Allow-Methods "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    Header always set Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+    Header always set Access-Control-Max-Age "86400"
+</IfModule>
+
+# Reescritura a index.php
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^(.*)$ index.php [QSA,L]
+
+# Sin listado de directorios
+Options -Indexes
