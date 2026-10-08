@@ -1,53 +1,72 @@
-import React from 'react';
+import React, { Component, ReactNode } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, spacing, typography } from '@theme/index';
-import Button from '../ui/Button';
-import { logger } from '@utils/logger';
+import { colors, radius, spacing, typography } from '@theme/index';
+import Button from '@components/ui/Button';
 
-interface Props {
-  children: React.ReactNode;
+interface ErrorBoundaryProps {
+  children: ReactNode;
+  onReset?: () => void;
+  fallback?: (error: Error, reset: () => void) => ReactNode;
 }
 
-interface State {
-  hasError: boolean;
-  error?: Error;
+interface ErrorBoundaryState {
+  error: Error | null;
 }
 
-export default class ErrorBoundary extends React.Component<Props, State> {
-  state: State = { hasError: false };
+/**
+ * Captura errores de render en el árbol hijo.
+ * Nota: al ser un class component no puede usar hooks, por eso
+ * usa los colores estáticos del tema claro. Los componentes hijos
+ * sí respetan el tema activo.
+ */
+export default class ErrorBoundary extends Component<
+  ErrorBoundaryProps,
+  ErrorBoundaryState
+> {
+  state: ErrorBoundaryState = { error: null };
 
-  static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { error };
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo): void {
-    logger.error('ErrorBoundary', error, info);
+    // eslint-disable-next-line no-console
+    console.error('ErrorBoundary caught:', error, info);
   }
 
   reset = (): void => {
-    this.setState({ hasError: false, error: undefined });
+    this.setState({ error: null });
+    this.props.onReset?.();
   };
 
-  render(): React.ReactNode {
-    if (this.state.hasError) {
+  render(): ReactNode {
+    const { error } = this.state;
+
+    if (error) {
+      if (this.props.fallback) {
+        return this.props.fallback(error, this.reset);
+      }
+
       return (
         <View style={styles.container}>
-          <MaterialCommunityIcons
-            name="alert-circle-outline"
-            size={48}
-            color={colors.danger}
-          />
+          <View style={styles.iconWrap}>
+            <MaterialCommunityIcons
+              name="alert-octagon-outline"
+              size={32}
+              color={colors.danger}
+            />
+          </View>
           <Text style={styles.title}>Algo salió mal</Text>
-          <Text style={styles.message} numberOfLines={3}>
-            {this.state.error?.message ?? 'Error desconocido'}
+          <Text style={styles.description}>
+            Ocurrió un error inesperado. Puedes intentar de nuevo.
           </Text>
-          <View style={{ marginTop: spacing.xl, width: 200 }}>
+          <View style={styles.actions}>
             <Button
               label="Reintentar"
-              onPress={this.reset}
+              icon="refresh"
               variant="primary"
-              fullWidth
+              onPress={this.reset}
             />
           </View>
         </View>
@@ -66,15 +85,30 @@ const styles = StyleSheet.create({
     padding: spacing.xxl,
     backgroundColor: colors.bg,
   },
+  iconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.pill,
+    backgroundColor: colors.dangerSubtle,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: spacing.lg,
+  },
   title: {
-    ...typography.h2,
+    ...typography.h3,
     color: colors.textPrimary,
-    marginTop: spacing.lg,
+    textAlign: 'center',
     marginBottom: spacing.sm,
   },
-  message: {
+  description: {
     ...typography.body,
     color: colors.textSecondary,
     textAlign: 'center',
+    maxWidth: 280,
+    lineHeight: 22,
+  },
+  actions: {
+    marginTop: spacing.xl,
+    minWidth: 180,
   },
 });

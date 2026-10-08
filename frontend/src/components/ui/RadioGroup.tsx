@@ -1,39 +1,104 @@
 import React from 'react';
-import { Pressable, Text, StyleSheet, View } from 'react-native';
-import { colors, spacing, typography } from '@theme/index';
+import { Pressable, Text, View, StyleSheet, ViewStyle } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 
-interface RadioOption<T extends string> {
+export interface RadioOption<T extends string | number> {
+  value: T;
   label: string;
-  value: T;
+  description?: string;
+  disabled?: boolean;
 }
 
-interface RadioGroupProps<T extends string> {
-  options: RadioOption<T>[];
-  value: T;
+interface RadioGroupProps<T extends string | number> {
+  value: T | null;
   onChange: (value: T) => void;
+  options: RadioOption<T>[];
+  style?: ViewStyle;
 }
 
-export default function RadioGroup<T extends string>({
-  options,
+export default function RadioGroup<T extends string | number>({
   value,
   onChange,
+  options,
+  style,
 }: RadioGroupProps<T>): React.ReactElement {
+  const colors = useColors();
+
   return (
-    <View style={styles.container}>
-      {options.map((opt) => {
-        const selected = opt.value === value;
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+        },
+        style,
+      ]}
+      accessibilityRole="radiogroup"
+    >
+      {options.map((option, index) => {
+        const selected = option.value === value;
+        const isLast = index === options.length - 1;
+
         return (
           <Pressable
-            key={opt.value}
-            onPress={() => onChange(opt.value)}
-            style={styles.row}
+            key={String(option.value)}
+            onPress={option.disabled ? undefined : () => onChange(option.value)}
+            disabled={option.disabled}
             accessibilityRole="radio"
-            accessibilityState={{ selected }}
+            accessibilityState={{ selected, disabled: option.disabled }}
+            accessibilityLabel={option.label}
+            style={({ pressed }) => [
+              styles.row,
+              { borderBottomColor: colors.border },
+              isLast ? styles.rowLast : null,
+              pressed && !option.disabled
+                ? { backgroundColor: colors.surfacePressed }
+                : null,
+              option.disabled ? styles.rowDisabled : null,
+            ]}
           >
-            <View style={[styles.circle, selected ? styles.circleSelected : null]}>
-              {selected ? <View style={styles.dot} /> : null}
+            <View
+              style={[
+                styles.dot,
+                {
+                  borderColor: selected ? colors.primary : colors.borderStrong,
+                  backgroundColor: colors.surface,
+                },
+              ]}
+            >
+              {selected ? (
+                <View
+                  style={[
+                    styles.dotInner,
+                    { backgroundColor: colors.primary },
+                  ]}
+                />
+              ) : null}
             </View>
-            <Text style={styles.label}>{opt.label}</Text>
+
+            <View style={styles.content}>
+              <Text style={[styles.label, { color: colors.textPrimary }]}>
+                {option.label}
+              </Text>
+              {option.description ? (
+                <Text
+                  style={[styles.description, { color: colors.textMuted }]}
+                >
+                  {option.description}
+                </Text>
+              ) : null}
+            </View>
+
+            {selected ? (
+              <MaterialCommunityIcons
+                name="check"
+                size={16}
+                color={colors.primary}
+              />
+            ) : null}
           </Pressable>
         );
       })}
@@ -42,23 +107,39 @@ export default function RadioGroup<T extends string>({
 }
 
 const styles = StyleSheet.create({
-  container: { gap: spacing.md },
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  circle: {
+  container: {
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderBottomWidth: 1,
+    gap: spacing.md,
+    minHeight: 52,
+  },
+  rowLast: { borderBottomWidth: 0 },
+  rowDisabled: { opacity: 0.4 },
+  dot: {
     width: 20,
     height: 20,
     borderRadius: 10,
     borderWidth: 1.5,
-    borderColor: colors.borderStrong,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  circleSelected: { borderColor: colors.primary },
-  dot: {
+  dotInner: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    backgroundColor: colors.primary,
   },
-  label: { ...typography.body, color: colors.textPrimary },
+  content: { flex: 1 },
+  label: { ...typography.body },
+  description: {
+    ...typography.small,
+    marginTop: 2,
+  },
 });

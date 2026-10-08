@@ -10,17 +10,22 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
+import { usePOSShortcuts } from '@hooks/usePOSShortcuts';
+import { useProductViewMode } from '@hooks/useProductViewMode';
+import { useSuccessPulse } from '@hooks/useSuccessPulse';
 import { useProductosStore } from '@store/productosStore';
 import { useCarritoStore } from '@store/carritoStore';
 import { useAuthStore } from '@store/authStore';
-import { ventasApi, clientesApi } from '@api/index';
+import { clientesApi } from '@api/index';
 import { useNetworkStatus } from '@hooks/useNetworkStatus';
 import BusinessLogo from '@components/domain/BusinessLogo';
 import {
@@ -32,12 +37,18 @@ import {
 } from '@services/offline.service';
 import type { Producto, Cliente, AppTabsParamList } from '@tipos/index';
 import { formatCurrency } from '@utils/format';
-import Input from '@components/ui/Input';
 import FormattedNumberInput from '@components/forms/FormattedNumberInput';
 import Button from '@components/ui/Button';
 import Modal from '@components/ui/Modal';
 import Toast from '@components/ui/Toast';
-import Tooltip from '@components/ui/Tooltip';
+import RichEmptyState from '@components/ui/RichEmptyState';
+import ProductViewToggle from '@components/ui/ProductViewToggle';
+import { SuccessPulse } from '@components/feedback';
+import ProductCard from './components/ProductCard';
+import ProductListItem from './components/ProductListItem';
+import ProductCompactItem from './components/ProductCompactItem';
+import CartItem from './components/CartItem';
+import PaymentSheet, { type MetodoPago } from './components/PaymentSheet';
 import type { ToastVariant } from '@tipos/index';
 
 type Params = RouteProp<AppTabsParamList, 'Vender'>;
@@ -47,6 +58,11 @@ export default function POSScreen(): React.ReactElement {
   const route = useRoute<Params>();
   const usuario = useAuthStore((state) => state.user);
   const isOnline = useNetworkStatus();
+  const colors = useColors();
+  const { width } = useWindowDimensions();
+  const isWide = width >= 900;
+  const { mode: productMode, setMode: setProductMode } = useProductViewMode();
+
   const { productos, cargar } = useProductosStore();
   const {
     items,
@@ -66,16 +82,19 @@ export default function POSScreen(): React.ReactElement {
   } = useCarritoStore();
 
   const [busqueda, setBusqueda] = useState('');
-  const [cobrando, setCobrando] = useState(false);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [modalCliente, setModalCliente] = useState(false);
   const [busquedaCliente, setBusquedaCliente] = useState('');
   const [modalDescuento, setModalDescuento] = useState(false);
   const [descuentoInput, setDescuentoInput] = useState('0');
+  const [paymentSheetOpen, setPaymentSheetOpen] = useState(false);
+  const [cobrando, setCobrando] = useState(false);
   const [ventasPendientes, setVentasPendientes] = useState<VentaPendiente[]>([]);
   const [sincronizando, setSincronizando] = useState(false);
+  const [pulseVisible, triggerPulse] = useSuccessPulse();
   const syncLock = useRef(false);
   const cobrarLock = useRef(false);
+  const searchRef = useRef<TextInput>(null);
   const [toast, setToast] = useState<{
     visible: boolean;
     message: string;
@@ -93,7 +112,6 @@ export default function POSScreen(): React.ReactElement {
   const sincronizarPendientes = useCallback(
     async (manual = false): Promise<void> => {
       if (!usuario?.id || isOnline !== true || syncLock.current) return;
-
       syncLock.current = true;
       setSincronizando(true);
       try {
@@ -201,103 +219,6 @@ export default function POSScreen(): React.ReactElement {
     );
   });
 
-  const onCobrar = async (): Promise<void> => {
-    if (items.length === 0) {
-      setToast({
-        visible: true,
-        message: 'El carrito está vacío',
-        variant: 'error',
-      });
-      return;
-    }
-    if (tipoPago === 'credito' && clienteId === null) {
-      setToast({
-        visible: true,
-        message: 'Selecciona un cliente para crédito',
-        variant: 'error',
-      });
-      return;
-    }
-    if (!usuario?.id) {
-      setToast({ visible: true, message: 'Vuelve a iniciar sesión para cobrar.', variant: 'error' });
-      return;
-    }
-    if (cobrarLock.current) return;
-
-    cobrarLock.current = true;
-    setCobrando(true);
-    let guardadaLocalmente = false;
-    try {
-      const pending = crearVentaPendiente({
-        tipo_pago: tipoPago,
-        cliente_id: clienteId,
-        descuento,
-        items: items.map((i) => ({
-          producto_id: i.producto.id,
-          cantidad: i.cantidad,
-        })),
-      }, usuario.id, total());
-
-      await guardarVentaPendiente(pending);
-      guardadaLocalmente = true;
-      await recargarPendientes();
-
-      if (isOnline === true) {
-        await sincronizarPendientes();
-      }
-
-      const remaining = await listarVentasPendientes(usuario.id);
-      setVentasPendientes(remaining);
-      limpiar();
-
-      if (remaining.some((sale) => sale.id === pending.id)) {
-        const failure = remaining.find((sale) => sale.id === pending.id)?.ultimoError;
-        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-        setToast({
-          visible: true,
-          message: failure
-            ? `Venta guardada y pendiente de revisión: ${failure}`
-            : 'Venta guardada en el dispositivo; se enviará al recuperar conexión.',
-          variant: 'warning',
-        });
-        return;
-      }
-
-      await Haptics.notificationAsync(
-        Haptics.NotificationFeedbackType.Success,
-      );
-      limpiar();
-      await cargar({ busqueda: '' });
-      setToast({
-        visible: true,
-        message: 'Venta registrada',
-        variant: 'success',
-      });
-    } catch (e) {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const msg = e instanceof Error ? e.message : 'Error al cobrar';
-      if (guardadaLocalmente) {
-        limpiar();
-        setToast({
-          visible: true,
-          message: 'La venta quedó guardada en el dispositivo y se sincronizará después.',
-          variant: 'warning',
-        });
-      } else {
-        setToast({ visible: true, message: msg, variant: 'error' });
-      }
-    } finally {
-      cobrarLock.current = false;
-      setCobrando(false);
-    }
-  };
-
-  const guardarDescuento = (): void => {
-    const val = parseFloat(descuentoInput) || 0;
-    setDescuento(val);
-    setModalDescuento(false);
-  };
-
   const abrirModalCliente = async (): Promise<void> => {
     setBusquedaCliente('');
     try {
@@ -317,89 +238,200 @@ export default function POSScreen(): React.ReactElement {
     ]);
   };
 
-  return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      {/* Header con Tooltip */}
-      <View style={styles.header}>
-        <BusinessLogo size={36} style={styles.businessLogo} />
-        <View style={styles.headerInfo}>
-          <View style={styles.headerTitleRow}>
-            <Text style={styles.headerTitle}>Punto de venta</Text>
-            <Tooltip
-              title="Cómo vender"
-              text="Busca productos por nombre, código o usa el botón de cámara. Toca un producto para agregarlo al carrito y luego toca Cobrar."
+  const guardarDescuento = (): void => {
+    const val = parseFloat(descuentoInput) || 0;
+    setDescuento(val);
+    setModalDescuento(false);
+  };
+
+  const abrirCobro = (): void => {
+    if (items.length === 0) {
+      setToast({
+        visible: true,
+        message: 'El carrito está vacío',
+        variant: 'error',
+      });
+      return;
+    }
+    if (tipoPago === 'credito' && clienteId === null) {
+      setToast({
+        visible: true,
+        message: 'Selecciona un cliente para crédito',
+        variant: 'error',
+      });
+      return;
+    }
+    setPaymentSheetOpen(true);
+  };
+
+  const cobrar = async (metodo: MetodoPago): Promise<void> => {
+    if (!usuario?.id) {
+      setToast({
+        visible: true,
+        message: 'Vuelve a iniciar sesión para cobrar.',
+        variant: 'error',
+      });
+      return;
+    }
+    if (cobrarLock.current) return;
+    cobrarLock.current = true;
+    setCobrando(true);
+    let guardadaLocalmente = false;
+    try {
+      const pending = crearVentaPendiente(
+        {
+          tipo_pago: tipoPago,
+          cliente_id: clienteId,
+          descuento,
+          metodo_pago: metodo,
+          items: items.map((i) => ({
+            producto_id: i.producto.id,
+            cantidad: i.cantidad,
+          })),
+        },
+        usuario.id,
+        total(),
+      );
+
+      await guardarVentaPendiente(pending);
+      guardadaLocalmente = true;
+      await recargarPendientes();
+
+      if (isOnline === true) {
+        await sincronizarPendientes();
+      }
+
+      const remaining = await listarVentasPendientes(usuario.id);
+      setVentasPendientes(remaining);
+      limpiar();
+      setPaymentSheetOpen(false);
+
+      if (remaining.some((sale) => sale.id === pending.id)) {
+        const failure = remaining.find(
+          (sale) => sale.id === pending.id,
+        )?.ultimoError;
+        await Haptics.notificationAsync(
+          Haptics.NotificationFeedbackType.Warning,
+        );
+        setToast({
+          visible: true,
+          message: failure
+            ? `Venta guardada y pendiente: ${failure}`
+            : 'Venta guardada en el dispositivo; se enviará al recuperar conexión.',
+          variant: 'warning',
+        });
+        return;
+      }
+
+      await Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      );
+      triggerPulse();
+      await cargar({ busqueda: '' });
+      setToast({
+        visible: true,
+        message: 'Venta registrada',
+        variant: 'success',
+      });
+    } catch (e) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      const msg = e instanceof Error ? e.message : 'Error al cobrar';
+      if (guardadaLocalmente) {
+        limpiar();
+        setPaymentSheetOpen(false);
+        setToast({
+          visible: true,
+          message:
+            'La venta quedó guardada en el dispositivo y se sincronizará después.',
+          variant: 'warning',
+        });
+      } else {
+        setToast({ visible: true, message: msg, variant: 'error' });
+      }
+    } finally {
+      cobrarLock.current = false;
+      setCobrando(false);
+    }
+  };
+
+  usePOSShortcuts({
+    onCustomer: abrirModalCliente,
+    onDiscount: () => {
+      setDescuentoInput(String(descuento));
+      setModalDescuento(true);
+    },
+    onClear: limpiarCarrito,
+    onCheckout: abrirCobro,
+    onSearch: () => searchRef.current?.focus(),
+  });
+
+  // ============================================================
+  // Render de productos según modo
+  // ============================================================
+  const renderProductos = (): React.ReactElement => {
+    const numColumns =
+      productMode === 'grid'
+        ? isWide
+          ? 4
+          : 2
+        : 1;
+
+    const renderItem = ({
+      item,
+      index,
+    }: {
+      item: Producto;
+      index: number;
+    }): React.ReactElement => {
+      if (productMode === 'grid') {
+        return (
+          <View style={{ flex: 1 / numColumns }}>
+            <ProductCard
+              producto={item}
+              onPress={() => void onAgregar(item)}
             />
           </View>
-          <Text style={styles.headerSub}>
-            {cantidadTotal()} {cantidadTotal() === 1 ? 'item' : 'items'} en
-            carrito
-          </Text>
-        </View>
-        {items.length > 0 ? (
-          <Pressable
-            onPress={limpiarCarrito}
-            style={({ pressed }) => [
-              styles.clearBtn,
-              pressed ? styles.clearBtnPressed : null,
-            ]}
-          >
-            <MaterialCommunityIcons
-              name="trash-can-outline"
-              size={18}
-              color={colors.danger}
-            />
-          </Pressable>
-        ) : null}
-      </View>
+        );
+      }
 
-      {!isOnline || ventasPendientes.length > 0 ? (
-        <View style={styles.offlineBanner}>
-          <MaterialCommunityIcons
-            name={isOnline ? 'cloud-upload-outline' : 'cloud-off-outline'}
-            size={18}
-            color={isOnline ? colors.warning : colors.danger}
+      if (productMode === 'list') {
+        return (
+          <ProductListItem
+            producto={item}
+            onPress={() => void onAgregar(item)}
+            isLast={index === productosFiltrados.length - 1}
           />
-          <Text style={styles.offlineBannerText} numberOfLines={2}>
-            {isOnline
-              ? `${ventasPendientes.length} venta(s) pendiente(s) de sincronizar.`
-              : `Sin conexión. ${ventasPendientes.length} venta(s) guardada(s) en este dispositivo.`}
-          </Text>
-          {isOnline && ventasPendientes.length > 0 ? (
-            <Pressable
-              onPress={() => void sincronizarPendientes(true)}
-              disabled={sincronizando}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Sincronizar ventas pendientes"
-              style={styles.syncButton}
-            >
-              <MaterialCommunityIcons
-                name={sincronizando ? 'progress-clock' : 'sync'}
-                size={20}
-                color={colors.primary}
-              />
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
+        );
+      }
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      return (
+        <ProductCompactItem
+          producto={item}
+          onPress={() => void onAgregar(item)}
+          isLast={index === productosFiltrados.length - 1}
+        />
+      );
+    };
+
+    return (
+      <View style={styles.productosSection}>
+        {/* Fila de búsqueda + toggle */}
         <View style={styles.searchWrapper}>
-          <View style={styles.searchBox}>
+          <View
+            style={[styles.searchBox, { backgroundColor: colors.bgSubtle }]}
+          >
             <MaterialCommunityIcons
               name="magnify"
               size={18}
               color={colors.textMuted}
             />
             <TextInput
-              placeholder="Buscar producto por nombre o código"
+              ref={searchRef}
+              placeholder="Buscar por nombre o código"
               placeholderTextColor={colors.textMuted}
               value={busqueda}
               onChangeText={setBusqueda}
-              style={styles.searchInput}
+              style={[styles.searchInput, { color: colors.textPrimary }]}
               autoCapitalize="none"
               autoCorrect={false}
             />
@@ -414,13 +446,19 @@ export default function POSScreen(): React.ReactElement {
             ) : null}
           </View>
 
+          <ProductViewToggle
+            mode={productMode}
+            onChange={setProductMode}
+          />
+
           <Pressable
             onPress={abrirScanner}
             style={({ pressed }) => [
               styles.scanBtn,
-              pressed ? styles.scanBtnPressed : null,
+              { backgroundColor: colors.primary },
+              pressed ? { opacity: 0.85 } : null,
             ]}
-            accessibilityLabel="Escanear código de barras"
+            accessibilityLabel="Escanear código"
           >
             <MaterialCommunityIcons
               name="barcode-scan"
@@ -430,257 +468,410 @@ export default function POSScreen(): React.ReactElement {
           </Pressable>
         </View>
 
-        <View style={styles.productosWrap}>
+        {/* Resultado */}
+        {productosFiltrados.length === 0 ? (
+          <RichEmptyState
+            icon="package-variant"
+            title={busqueda ? 'Sin resultados' : 'Sin productos'}
+            description={
+              busqueda
+                ? `No hay productos que coincidan con "${busqueda}"`
+                : 'Agrega productos en el catálogo.'
+            }
+          />
+        ) : (
           <FlatList
             data={productosFiltrados}
             keyExtractor={(item) => String(item.id)}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.productosScroll}
-            renderItem={({ item }) => (
-              <Pressable
-                onPress={() => onAgregar(item)}
-                disabled={item.stock <= 0}
-                style={({ pressed }) => [
-                  styles.prodCard,
-                  item.stock <= 0 ? styles.prodCardDisabled : null,
-                  pressed && item.stock > 0 ? styles.prodCardPressed : null,
-                ]}
-              >
-                <Text style={styles.prodNombre} numberOfLines={2}>
-                  {item.nombre}
-                </Text>
-                <Text style={styles.prodPrecio}>
-                  {formatCurrency(item.precio_venta)}
-                </Text>
-                <Text style={styles.prodStock}>
-                  {item.stock > 0 ? `${item.stock} und` : 'Agotado'}
-                </Text>
-              </Pressable>
-            )}
-            ListEmptyComponent={
-              <Text style={styles.emptyText}>Sin resultados</Text>
+            numColumns={numColumns}
+            key={`${productMode}-${numColumns}`}
+            columnWrapperStyle={
+              productMode === 'grid'
+                ? { gap: spacing.sm }
+                : undefined
             }
+            contentContainerStyle={
+              productMode === 'grid'
+                ? styles.productosGrid
+                : styles.productosList
+            }
+            showsVerticalScrollIndicator={false}
+            renderItem={renderItem}
+          />
+        )}
+      </View>
+    );
+  };
+
+  const renderCarrito = (): React.ReactElement => (
+    <View
+      style={[
+        styles.carritoSection,
+        {
+          backgroundColor: colors.surface,
+          borderLeftWidth: isWide ? 1 : 0,
+          borderLeftColor: colors.border,
+        },
+      ]}
+    >
+      <View style={styles.carritoHeader}>
+        <View style={styles.carritoHeaderLeft}>
+          <Text style={[styles.carritoTitle, { color: colors.textPrimary }]}>
+            Carrito
+          </Text>
+          {items.length > 0 ? (
+            <View
+              style={[
+                styles.carritoCount,
+                { backgroundColor: colors.accentSubtle },
+              ]}
+            >
+              <Text
+                style={[styles.carritoCountText, { color: colors.accentText }]}
+              >
+                {cantidadTotal()}
+              </Text>
+            </View>
+          ) : null}
+        </View>
+
+        {items.length > 0 ? (
+          <Pressable
+            onPress={limpiarCarrito}
+            style={({ pressed }) => [
+              styles.clearBtn,
+              { backgroundColor: colors.dangerSubtle },
+              pressed ? { opacity: 0.7 } : null,
+            ]}
+            accessibilityLabel="Vaciar carrito"
+          >
+            <MaterialCommunityIcons
+              name="trash-can-outline"
+              size={16}
+              color={colors.danger}
+            />
+          </Pressable>
+        ) : null}
+      </View>
+
+      <ScrollView
+        style={styles.carritoScroll}
+        contentContainerStyle={styles.carritoScrollContent}
+        showsVerticalScrollIndicator={false}
+      >
+        {items.length === 0 ? (
+          <View style={styles.emptyCart}>
+            <MaterialCommunityIcons
+              name="cart-outline"
+              size={36}
+              color={colors.textMuted}
+            />
+            <Text
+              style={[styles.emptyCartTitle, { color: colors.textPrimary }]}
+            >
+              Carrito vacío
+            </Text>
+            <Text
+              style={[styles.emptyCartText, { color: colors.textMuted }]}
+            >
+              Toca un producto para agregarlo
+            </Text>
+          </View>
+        ) : (
+          items.map((item, idx) => (
+            <CartItem
+              key={item.producto.id}
+              item={item}
+              onIncrement={() =>
+                setCantidad(item.producto.id, item.cantidad + 1)
+              }
+              onDecrement={() =>
+                setCantidad(item.producto.id, item.cantidad - 1)
+              }
+              onRemove={() => quitar(item.producto.id)}
+              isLast={idx === items.length - 1}
+            />
+          ))
+        )}
+      </ScrollView>
+
+      <View
+        style={[
+          styles.totales,
+          { borderTopColor: colors.border, backgroundColor: colors.surface },
+        ]}
+      >
+        <View style={styles.totalRow}>
+          <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>
+            Subtotal
+          </Text>
+          <Text style={[styles.totalValue, { color: colors.textPrimary }]}>
+            {formatCurrency(subtotal())}
+          </Text>
+        </View>
+
+        <Pressable
+          onPress={() => {
+            setDescuentoInput(String(descuento));
+            setModalDescuento(true);
+          }}
+          style={styles.totalRow}
+        >
+          <View style={styles.discountLabelRow}>
+            <Text style={[styles.totalLabel, { color: colors.accent }]}>
+              Descuento
+            </Text>
+            {descuento > 0 ? (
+              <Text style={[styles.discountValue, { color: colors.accent }]}>
+                −{formatCurrency(descuento)}
+              </Text>
+            ) : null}
+          </View>
+          <MaterialCommunityIcons
+            name="pencil-outline"
+            size={14}
+            color={colors.accent}
+          />
+        </Pressable>
+
+        <View style={[styles.divider, { backgroundColor: colors.border }]} />
+
+        <View style={styles.totalRow}>
+          <Text style={[styles.totalGrandeLabel, { color: colors.textPrimary }]}>
+            Total
+          </Text>
+          <Text style={[styles.totalGrandeValue, { color: colors.textPrimary }]}>
+            {formatCurrency(total())}
+          </Text>
+        </View>
+
+        <View style={styles.tipoPagoWrap}>
+          <Pressable
+            onPress={() => setTipoPago('contado')}
+            style={[
+              styles.segBtn,
+              {
+                backgroundColor:
+                  tipoPago === 'contado' ? colors.primary : colors.bgSubtle,
+              },
+            ]}
+          >
+            <MaterialCommunityIcons
+              name="cash-check"
+              size={14}
+              color={
+                tipoPago === 'contado'
+                  ? colors.textInverse
+                  : colors.textSecondary
+              }
+            />
+            <Text
+              style={[
+                styles.segLabel,
+                {
+                  color:
+                    tipoPago === 'contado'
+                      ? colors.textInverse
+                      : colors.textSecondary,
+                },
+              ]}
+            >
+              Contado
+            </Text>
+          </Pressable>
+
+          <Pressable
+            onPress={() => setTipoPago('credito')}
+            style={[
+              styles.segBtn,
+              {
+                backgroundColor:
+                  tipoPago === 'credito' ? colors.primary : colors.bgSubtle,
+              },
+            ]}
+          >
+            <MaterialCommunityIcons
+              name="account-cash-outline"
+              size={14}
+              color={
+                tipoPago === 'credito'
+                  ? colors.textInverse
+                  : colors.textSecondary
+              }
+            />
+            <Text
+              style={[
+                styles.segLabel,
+                {
+                  color:
+                    tipoPago === 'credito'
+                      ? colors.textInverse
+                      : colors.textSecondary,
+                },
+              ]}
+            >
+              Crédito
+            </Text>
+          </Pressable>
+        </View>
+
+        {tipoPago === 'credito' ? (
+          <Pressable
+            style={({ pressed }) => [
+              styles.clienteBox,
+              { backgroundColor: colors.bgSubtle },
+              pressed ? { backgroundColor: colors.surfacePressed } : null,
+            ]}
+            onPress={abrirModalCliente}
+          >
+            <MaterialCommunityIcons
+              name="account-outline"
+              size={18}
+              color={colors.textSecondary}
+            />
+            <View style={styles.clienteInfo}>
+              <Text style={[styles.clienteLabel, { color: colors.textMuted }]}>
+                Cliente
+              </Text>
+              <Text
+                style={[
+                  styles.clienteValue,
+                  {
+                    color: clienteSel ? colors.textPrimary : colors.textMuted,
+                  },
+                ]}
+                numberOfLines={1}
+              >
+                {clienteSel
+                  ? `${clienteSel.nombre} · Deuda ${formatCurrency(
+                      clienteSel.saldo_deuda,
+                    )}`
+                  : 'Seleccionar cliente'}
+              </Text>
+            </View>
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={18}
+              color={colors.textMuted}
+            />
+          </Pressable>
+        ) : null}
+
+        <View style={styles.cobrarWrap}>
+          <Button
+            label={`Cobrar ${formatCurrency(total())}`}
+            onPress={abrirCobro}
+            disabled={items.length === 0}
+            variant="primary"
+            size="lg"
+            icon="check-circle-outline"
+            fullWidth
           />
         </View>
+      </View>
+    </View>
+  );
 
-        <View style={styles.carritoWrap}>
-          <View style={styles.carritoHeader}>
-            <Text style={styles.carritoTitle}>Carrito</Text>
-            {items.length > 0 ? (
-              <View style={styles.carritoCount}>
-                <Text style={styles.carritoCountText}>{items.length}</Text>
+  return (
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+      edges={['top']}
+    >
+      <View
+        style={[
+          styles.header,
+          {
+            backgroundColor: colors.surface,
+            borderBottomColor: colors.border,
+          },
+        ]}
+      >
+        <BusinessLogo size={32} style={styles.businessLogo} />
+        <View style={styles.headerInfo}>
+          <View style={styles.headerTitleRow}>
+            <Text style={[styles.headerTitle, { color: colors.textPrimary }]}>
+              Punto de venta
+            </Text>
+            {Platform.OS === 'web' ? (
+              <View
+                style={[
+                  styles.shortcutHint,
+                  {
+                    backgroundColor: colors.bgSubtle,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <Text
+                  style={[styles.shortcutHintText, { color: colors.textMuted }]}
+                >
+                  Ctrl+K buscar
+                </Text>
               </View>
             ) : null}
           </View>
+          <Text style={[styles.headerSub, { color: colors.textSecondary }]}>
+            {cantidadTotal()}{' '}
+            {cantidadTotal() === 1 ? 'item en carrito' : 'items en carrito'}
+          </Text>
+        </View>
+      </View>
 
-          <ScrollView
-            style={styles.carritoScroll}
-            contentContainerStyle={styles.carritoScrollContent}
-            showsVerticalScrollIndicator={false}
+      {!isOnline || ventasPendientes.length > 0 ? (
+        <View
+          style={[
+            styles.offlineBanner,
+            {
+              backgroundColor: colors.warningSubtle,
+              borderBottomColor: colors.border,
+            },
+          ]}
+        >
+          <MaterialCommunityIcons
+            name={isOnline ? 'cloud-upload-outline' : 'cloud-off-outline'}
+            size={16}
+            color={isOnline ? colors.warning : colors.danger}
+          />
+          <Text
+            style={[styles.offlineBannerText, { color: colors.textPrimary }]}
+            numberOfLines={2}
           >
-            {items.length === 0 ? (
-              <View style={styles.emptyCart}>
-                <MaterialCommunityIcons
-                  name="cart-outline"
-                  size={28}
-                  color={colors.textMuted}
-                />
-                <Text style={styles.emptyCartText}>
-                  Agrega productos para comenzar
-                </Text>
-              </View>
-            ) : (
-              items.map((item, idx) => (
-                <View
-                  key={item.producto.id}
-                  style={[
-                    styles.cartItem,
-                    idx === items.length - 1 ? styles.cartItemLast : null,
-                  ]}
-                >
-                  <View style={styles.cartInfo}>
-                    <Text style={styles.cartName} numberOfLines={1}>
-                      {item.producto.nombre}
-                    </Text>
-                    <Text style={styles.cartPrecio}>
-                      {formatCurrency(item.producto.precio_venta)} ×{' '}
-                      {item.cantidad}
-                    </Text>
-                  </View>
-
-                  <View style={styles.stepper}>
-                    <Pressable
-                      onPress={() =>
-                        setCantidad(item.producto.id, item.cantidad - 1)
-                      }
-                      style={styles.stepBtn}
-                      hitSlop={4}
-                    >
-                      <MaterialCommunityIcons
-                        name="minus"
-                        size={14}
-                        color={colors.textPrimary}
-                      />
-                    </Pressable>
-                    <Text style={styles.stepValue}>{item.cantidad}</Text>
-                    <Pressable
-                      onPress={() =>
-                        setCantidad(item.producto.id, item.cantidad + 1)
-                      }
-                      style={styles.stepBtn}
-                      hitSlop={4}
-                    >
-                      <MaterialCommunityIcons
-                        name="plus"
-                        size={14}
-                        color={colors.textPrimary}
-                      />
-                    </Pressable>
-                  </View>
-
-                  <Text style={styles.cartSubtotal}>
-                    {formatCurrency(
-                      parseFloat(item.producto.precio_venta) * item.cantidad,
-                    )}
-                  </Text>
-
-                  <Pressable
-                    onPress={() => quitar(item.producto.id)}
-                    hitSlop={6}
-                    style={styles.cartQuitar}
-                  >
-                    <MaterialCommunityIcons
-                      name="close"
-                      size={16}
-                      color={colors.textMuted}
-                    />
-                  </Pressable>
-                </View>
-              ))
-            )}
-          </ScrollView>
-
-          <View style={styles.totales}>
-            <View style={styles.totalRow}>
-              <Text style={styles.totalLabel}>Subtotal</Text>
-              <Text style={styles.totalValue}>
-                {formatCurrency(subtotal())}
-              </Text>
-            </View>
-
+            {isOnline
+              ? `${ventasPendientes.length} venta(s) pendiente(s) de sincronizar.`
+              : `Sin conexión. ${ventasPendientes.length} venta(s) guardada(s) localmente.`}
+          </Text>
+          {isOnline && ventasPendientes.length > 0 ? (
             <Pressable
-              onPress={() => {
-                setDescuentoInput(String(descuento));
-                setModalDescuento(true);
-              }}
-              style={styles.totalRow}
+              onPress={() => void sincronizarPendientes(true)}
+              disabled={sincronizando}
+              hitSlop={8}
+              style={styles.syncButton}
             >
-              <Text style={[styles.totalLabel, { color: colors.accent }]}>
-                Descuento{' '}
-                {descuento > 0 ? `(-${formatCurrency(descuento)})` : ''}
-              </Text>
               <MaterialCommunityIcons
-                name="pencil-outline"
-                size={14}
-                color={colors.accent}
+                name={sincronizando ? 'progress-clock' : 'sync'}
+                size={18}
+                color={colors.primary}
               />
             </Pressable>
-
-            <View style={styles.divider} />
-
-            <View style={styles.totalRow}>
-              <Text style={styles.totalGrandeLabel}>Total</Text>
-              <Text style={styles.totalGrandeValue}>
-                {formatCurrency(total())}
-              </Text>
-            </View>
-
-            <View style={styles.tipoPagoWrap}>
-              <Pressable
-                onPress={() => setTipoPago('contado')}
-                style={[
-                  styles.segBtn,
-                  tipoPago === 'contado' ? styles.segBtnActive : null,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.segLabel,
-                    tipoPago === 'contado' ? styles.segLabelActive : null,
-                  ]}
-                >
-                  Contado
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setTipoPago('credito')}
-                style={[
-                  styles.segBtn,
-                  tipoPago === 'credito' ? styles.segBtnActive : null,
-                ]}
-              >
-                <Text
-                  style={[
-                    styles.segLabel,
-                    tipoPago === 'credito' ? styles.segLabelActive : null,
-                  ]}
-                >
-                  Crédito
-                </Text>
-              </Pressable>
-            </View>
-
-            {tipoPago === 'credito' ? (
-              <Pressable
-                style={({ pressed }) => [
-                  styles.clienteBox,
-                  pressed ? styles.clienteBoxPressed : null,
-                ]}
-                onPress={abrirModalCliente}
-              >
-                <MaterialCommunityIcons
-                  name="account-outline"
-                  size={18}
-                  color={colors.textSecondary}
-                />
-                <View style={styles.clienteInfo}>
-                  <Text style={styles.clienteLabel}>Cliente</Text>
-                  <Text
-                    style={[
-                      styles.clienteValue,
-                      !clienteSel ? styles.clientePlaceholder : null,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {clienteSel
-                      ? `${clienteSel.nombre} · Deuda ${formatCurrency(
-                          clienteSel.saldo_deuda,
-                        )}`
-                      : 'Seleccionar cliente'}
-                  </Text>
-                </View>
-                <MaterialCommunityIcons
-                  name="chevron-right"
-                  size={18}
-                  color={colors.textMuted}
-                />
-              </Pressable>
-            ) : null}
-
-            <View style={styles.cobrarWrap}>
-              <Button
-                label={`Cobrar ${formatCurrency(total())}`}
-                onPress={onCobrar}
-                loading={cobrando}
-                disabled={cobrando || items.length === 0}
-                variant="primary"
-                size="lg"
-                fullWidth
-              />
-            </View>
-          </View>
+          ) : null}
         </View>
+      ) : null}
+
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      >
+        {isWide ? (
+          <View style={styles.splitView}>
+            <View style={styles.splitLeft}>{renderProductos()}</View>
+            <View style={styles.splitRight}>{renderCarrito()}</View>
+          </View>
+        ) : (
+          <View style={styles.mobileLayout}>
+            <View style={styles.mobileTop}>{renderProductos()}</View>
+            <View style={styles.mobileBottom}>{renderCarrito()}</View>
+          </View>
+        )}
       </KeyboardAvoidingView>
 
       <Modal
@@ -689,7 +880,9 @@ export default function POSScreen(): React.ReactElement {
         title="Seleccionar cliente"
         scrollable
       >
-        <View style={styles.modalSearchBox}>
+        <View
+          style={[styles.modalSearchBox, { backgroundColor: colors.bgSubtle }]}
+        >
           <MaterialCommunityIcons
             name="magnify"
             size={18}
@@ -700,7 +893,7 @@ export default function POSScreen(): React.ReactElement {
             placeholderTextColor={colors.textMuted}
             value={busquedaCliente}
             onChangeText={setBusquedaCliente}
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: colors.textPrimary }]}
           />
         </View>
 
@@ -709,10 +902,11 @@ export default function POSScreen(): React.ReactElement {
             key={c.id}
             style={({ pressed }) => [
               styles.modalRow,
+              { borderBottomColor: colors.border },
               index === clientesFiltrados.length - 1
                 ? styles.modalRowLast
                 : null,
-              pressed ? styles.modalRowPressed : null,
+              pressed ? { opacity: 0.7 } : null,
             ]}
             onPress={() => {
               setClienteId(c.id);
@@ -720,8 +914,12 @@ export default function POSScreen(): React.ReactElement {
             }}
           >
             <View style={{ flex: 1 }}>
-              <Text style={styles.modalNombre}>{c.nombre}</Text>
-              <Text style={styles.modalSub}>
+              <Text
+                style={[styles.modalNombre, { color: colors.textPrimary }]}
+              >
+                {c.nombre}
+              </Text>
+              <Text style={[styles.modalSub, { color: colors.textMuted }]}>
                 Deuda: {formatCurrency(c.saldo_deuda)} · Cupo:{' '}
                 {formatCurrency(c.cupo_credito)}
               </Text>
@@ -735,7 +933,9 @@ export default function POSScreen(): React.ReactElement {
         ))}
 
         {clientesFiltrados.length === 0 ? (
-          <Text style={styles.emptyText}>Sin clientes registrados</Text>
+          <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+            Sin clientes registrados
+          </Text>
         ) : null}
       </Modal>
 
@@ -759,220 +959,176 @@ export default function POSScreen(): React.ReactElement {
         />
       </Modal>
 
+      <PaymentSheet
+        visible={paymentSheetOpen}
+        total={total()}
+        onClose={() => setPaymentSheetOpen(false)}
+        onConfirm={(metodo) => void cobrar(metodo)}
+        loading={cobrando}
+      />
+
       <Toast
         visible={toast.visible}
         message={toast.message}
         variant={toast.variant}
         onHide={() => setToast((t) => ({ ...t, visible: false }))}
       />
+
+      <SuccessPulse visible={pulseVisible} label="Venta registrada" />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
+  safe: { flex: 1 },
   flex: { flex: 1 },
+
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    gap: spacing.md,
   },
-  businessLogo: { marginRight: spacing.sm },
+  businessLogo: {},
+  headerInfo: { flex: 1, minWidth: 0 },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  headerTitle: { ...typography.h3 },
+  shortcutHint: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+  },
+  shortcutHintText: {
+    fontFamily: typography.button.fontFamily,
+    fontSize: 10,
+  },
+  headerSub: { ...typography.small, marginTop: 2 },
+
   offlineBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    backgroundColor: colors.warningSubtle,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
-  offlineBannerText: {
-    ...typography.small,
-    color: colors.textPrimary,
-    flex: 1,
-  },
+  offlineBannerText: { ...typography.small, flex: 1 },
   syncButton: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  headerInfo: { flex: 1 },
-  headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerTitle: { ...typography.h3, color: colors.textPrimary },
-  headerSub: {
-    ...typography.small,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  clearBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.md,
-    backgroundColor: colors.dangerSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  clearBtnPressed: { opacity: 0.7 },
+
+  splitView: { flex: 1, flexDirection: 'row' },
+  splitLeft: { flex: 1 },
+  splitRight: { width: 400 },
+
+  mobileLayout: { flex: 1 },
+  mobileTop: { flex: 1 },
+  mobileBottom: { flex: 1 },
+
+  productosSection: { flex: 1 },
   searchWrapper: {
     flexDirection: 'row',
     paddingHorizontal: spacing.lg,
     gap: spacing.sm,
     paddingTop: spacing.md,
     paddingBottom: spacing.md,
-    backgroundColor: colors.surface,
+    alignItems: 'center',
   },
   searchBox: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.bgSubtle,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    height: 40,
+    height: 42,
   },
   searchInput: {
     flex: 1,
     ...typography.body,
-    color: colors.textPrimary,
     marginLeft: spacing.sm,
     paddingVertical: 0,
   },
   scanBtn: {
-    width: 40,
-    height: 40,
+    width: 42,
+    height: 42,
     borderRadius: radius.md,
-    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  scanBtnPressed: { opacity: 0.85 },
-  productosWrap: {
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  productosScroll: {
+
+  productosGrid: {
     paddingHorizontal: spacing.lg,
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.lg,
     gap: spacing.sm,
   },
-  prodCard: {
-    width: 116,
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    padding: spacing.sm,
-    minHeight: 92,
-    justifyContent: 'space-between',
+  productosList: {
+    paddingBottom: spacing.lg,
   },
-  prodCardPressed: { backgroundColor: colors.surfacePressed },
-  prodCardDisabled: { opacity: 0.4 },
-  prodNombre: {
-    ...typography.small,
-    color: colors.textPrimary,
-    fontFamily: typography.bodyBold.fontFamily,
-  },
-  prodPrecio: {
-    ...typography.bodyBold,
-    color: colors.textPrimary,
-    marginTop: spacing.xs,
-  },
-  prodStock: { ...typography.small, color: colors.textMuted, marginTop: 2 },
-  emptyText: {
-    ...typography.caption,
-    color: colors.textMuted,
-    textAlign: 'center',
-    paddingVertical: spacing.lg,
-    width: '100%',
-  },
-  carritoWrap: {
+
+  carritoSection: {
     flex: 1,
-    backgroundColor: colors.surface,
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
   },
   carritoHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     marginBottom: spacing.md,
     gap: spacing.sm,
   },
-  carritoTitle: { ...typography.h3, color: colors.textPrimary },
+  carritoHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  carritoTitle: { ...typography.h3 },
   carritoCount: {
-    backgroundColor: colors.bgSubtle,
     borderRadius: radius.pill,
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
   },
   carritoCountText: {
     ...typography.small,
-    color: colors.textSecondary,
     fontFamily: typography.button.fontFamily,
   },
-  carritoScroll: { flex: 1 },
-  carritoScrollContent: { paddingBottom: spacing.md },
-  emptyCart: { alignItems: 'center', paddingVertical: spacing.xxl },
-  emptyCartText: {
-    ...typography.caption,
-    color: colors.textMuted,
-    marginTop: spacing.sm,
-  },
-  cartItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-    gap: spacing.sm,
-  },
-  cartItemLast: { borderBottomWidth: 0 },
-  cartInfo: { flex: 1, minWidth: 0 },
-  cartName: { ...typography.bodyBold, color: colors.textPrimary },
-  cartPrecio: { ...typography.small, color: colors.textMuted, marginTop: 2 },
-  stepper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surface,
-  },
-  stepBtn: {
-    width: 26,
-    height: 26,
+  clearBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stepValue: {
+
+  carritoScroll: { flex: 1 },
+  carritoScrollContent: { paddingBottom: spacing.md },
+
+  emptyCart: {
+    alignItems: 'center',
+    paddingVertical: spacing.xxl,
+    gap: spacing.sm,
+  },
+  emptyCartTitle: { ...typography.bodyBold, marginTop: spacing.sm },
+  emptyCartText: {
     ...typography.small,
-    color: colors.textPrimary,
-    fontFamily: typography.button.fontFamily,
-    minWidth: 22,
     textAlign: 'center',
+    maxWidth: 220,
   },
-  cartSubtotal: {
-    ...typography.bodyBold,
-    color: colors.textPrimary,
-    minWidth: 60,
-    textAlign: 'right',
-  },
-  cartQuitar: { padding: 2 },
+
   totales: {
     borderTopWidth: 1,
-    borderTopColor: colors.border,
     paddingTop: spacing.md,
+    paddingBottom: spacing.md,
   },
   totalRow: {
     flexDirection: 'row',
@@ -980,15 +1136,24 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 4,
   },
-  totalLabel: { ...typography.caption, color: colors.textSecondary },
-  totalValue: { ...typography.bodyBold, color: colors.textPrimary },
+  discountLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  totalLabel: { ...typography.caption },
+  discountValue: {
+    ...typography.small,
+    fontFamily: typography.button.fontFamily,
+  },
+  totalValue: { ...typography.bodyBold },
   divider: {
     height: 1,
-    backgroundColor: colors.border,
     marginVertical: spacing.sm,
   },
-  totalGrandeLabel: { ...typography.h3, color: colors.textPrimary },
-  totalGrandeValue: { ...typography.price, color: colors.textPrimary },
+  totalGrandeLabel: { ...typography.h3 },
+  totalGrandeValue: { ...typography.price },
+
   tipoPagoWrap: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -996,38 +1161,32 @@ const styles = StyleSheet.create({
   },
   segBtn: {
     flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
     paddingVertical: spacing.sm,
-    backgroundColor: colors.bgSubtle,
     borderRadius: radius.md,
   },
-  segBtnActive: { backgroundColor: colors.primary },
-  segLabel: { ...typography.buttonSmall, color: colors.textSecondary },
-  segLabelActive: { color: colors.textInverse },
+  segLabel: { ...typography.buttonSmall },
+
   clienteBox: {
     flexDirection: 'row',
     alignItems: 'center',
     marginTop: spacing.sm,
     padding: spacing.sm,
-    backgroundColor: colors.bgSubtle,
     borderRadius: radius.md,
     gap: spacing.sm,
   },
-  clienteBoxPressed: { backgroundColor: colors.surfacePressed },
   clienteInfo: { flex: 1 },
-  clienteLabel: { ...typography.small, color: colors.textMuted },
-  clienteValue: {
-    ...typography.caption,
-    color: colors.textPrimary,
-    marginTop: 2,
-  },
-  clientePlaceholder: { color: colors.textMuted },
-  cobrarWrap: { marginTop: spacing.md, marginBottom: spacing.md },
+  clienteLabel: { ...typography.small },
+  clienteValue: { ...typography.caption, marginTop: 2 },
+
+  cobrarWrap: { marginTop: spacing.md },
+
   modalSearchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.bgSubtle,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     height: 40,
@@ -1038,10 +1197,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
   modalRowLast: { borderBottomWidth: 0 },
-  modalRowPressed: { opacity: 0.7 },
-  modalNombre: { ...typography.bodyBold, color: colors.textPrimary },
-  modalSub: { ...typography.small, color: colors.textMuted, marginTop: 2 },
+  modalNombre: { ...typography.bodyBold },
+  modalSub: { ...typography.small, marginTop: 2 },
+  emptyText: {
+    ...typography.caption,
+    textAlign: 'center',
+    paddingVertical: spacing.lg,
+  },
 });

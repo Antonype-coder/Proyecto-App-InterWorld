@@ -8,6 +8,7 @@ export type RootStackParamList = {
 export type AuthStackParamList = {
   Login: undefined;
   ForgotPassword: undefined;
+  Pin: { mode?: 'verify' | 'set' } | undefined;
 };
 
 export type DashboardStackParamList = {
@@ -76,6 +77,7 @@ export type MasStackParamList = {
   EditarPerfil: undefined;
   CambiarPassword: undefined;
   Configuracion: undefined;
+  Apariencia: undefined;
   Notificaciones: undefined;
   Auditoria: undefined;
   CentroAyuda: undefined;

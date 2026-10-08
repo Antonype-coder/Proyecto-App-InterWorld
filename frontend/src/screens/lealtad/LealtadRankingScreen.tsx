@@ -1,102 +1,162 @@
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, RefreshControl, Pressable } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  RefreshControl,
+  Pressable,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 import { lealtadApi } from '@api/index';
 import type { ClienteRanking } from '@tipos/index';
 import { formatCurrency } from '@utils/format';
 import TopBar from '@components/layout/TopBar';
+import { FadeInItem } from '@components/animations';
 import Avatar from '@components/ui/Avatar';
 import LealtadBadge from '@components/domain/LealtadBadge';
-import EmptyState from '@components/ui/EmptyState';
-import Skeleton from '@components/ui/Skeleton';
+import RichEmptyState from '@components/ui/RichEmptyState';
+import SkeletonVenta from '@components/ui/SkeletonVenta';
+import ErrorState from '@components/feedback/ErrorState';
 
 export default function LealtadRankingScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
+  const colors = useColors();
   const [items, setItems] = useState<ClienteRanking[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const cargar = useCallback(async (): Promise<void> => {
+    setError(null);
     try {
       const res = await lealtadApi.ranking(100);
       setItems(res);
-    } catch {
-      setItems([]);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al cargar');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { setLoading(true); void cargar(); }, [cargar]));
+  useFocusEffect(
+    useCallback(() => {
+      setLoading(true);
+      void cargar();
+    }, [cargar]),
+  );
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <TopBar title="Ranking de lealtad" onBack={() => navigation.goBack()} />
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+      edges={['top']}
+    >
+      <TopBar
+        title="Ranking de lealtad"
+        subtitle={`${items.length} ${
+          items.length === 1 ? 'cliente' : 'clientes'
+        }`}
+        onBack={() => navigation.goBack()}
+      />
 
-      {loading ? (
-        <View style={styles.listWrapper}>
+      {loading && items.length === 0 ? (
+        <View>
           {[1, 2, 3, 4, 5].map((i) => (
-            <View key={i} style={styles.skelItem}>
-              <Skeleton width={40} height={40} borderRadius={20} />
-              <View style={{ flex: 1, marginLeft: spacing.md }}>
-                <Skeleton width="60%" height={14} />
-                <Skeleton width="40%" height={12} style={{ marginTop: 6 }} />
-              </View>
-            </View>
+            <SkeletonVenta key={i} />
           ))}
         </View>
+      ) : error && items.length === 0 ? (
+        <ErrorState
+          title="No pudimos cargar el ranking"
+          message="Revisa tu conexión e intenta de nuevo."
+          technicalMessage={error}
+          onRetry={cargar}
+        />
       ) : items.length === 0 ? (
-        <EmptyState
+        <RichEmptyState
           icon="crown-outline"
           title="Sin datos de lealtad"
-          description="Los clientes ganan puntos al comprar."
+          description="Los clientes ganan puntos al comprar. El ranking aparecerá cuando tengas clientes con actividad."
         />
       ) : (
         <FlatList
           data={items}
           keyExtractor={(item) => String(item.id)}
-          style={styles.list}
+          style={[
+            styles.list,
+            {
+              backgroundColor: colors.surface,
+              borderTopColor: colors.border,
+            },
+          ]}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
-              onRefresh={() => { setRefreshing(true); void cargar(); }}
+              onRefresh={() => {
+                setRefreshing(true);
+                void cargar();
+              }}
               tintColor={colors.textSecondary}
             />
           }
           renderItem={({ item, index }) => (
-            <Pressable
-              onPress={() =>
-                navigation.navigate('Mas', {
-                  screen: 'ClienteEstadoCuenta',
-                  params: { clienteId: item.id },
-                })
-              }
-              style={({ pressed }) => [styles.row, pressed ? styles.rowPressed : null]}
-            >
-              <View style={[
-                styles.rank,
-                index === 0 ? styles.rank1 : null,
-                index === 1 ? styles.rank2 : null,
-                index === 2 ? styles.rank3 : null,
-              ]}>
-                <Text style={styles.rankText}>{index + 1}</Text>
-              </View>
-              <Avatar nombre={item.nombre} size="sm" />
-              <View style={{ flex: 1, marginLeft: spacing.md }}>
-                <Text style={styles.nombre} numberOfLines={1}>{item.nombre}</Text>
-                <View style={styles.metaRow}>
-                  <LealtadBadge nivel={item.nivel_lealtad} size="sm" />
-                  <Text style={styles.puntos}>{item.puntos_actuales} pts</Text>
+            <FadeInItem delay={Math.min(index * 20, 240)}>
+              <Pressable
+                onPress={() =>
+                  navigation.navigate('Mas', {
+                    screen: 'ClienteEstadoCuenta',
+                    params: { clienteId: item.id },
+                  })
+                }
+                style={({ pressed }) => [
+                  styles.row,
+                  { borderBottomColor: colors.border },
+                  pressed ? { backgroundColor: colors.surfacePressed } : null,
+                ]}
+              >
+                <View
+                  style={[
+                    styles.rank,
+                    { backgroundColor: colors.bgSubtle },
+                    index === 0
+                      ? { backgroundColor: colors.warningSubtle }
+                      : null,
+                    index === 1 ? { backgroundColor: colors.bgMuted } : null,
+                    index === 2
+                      ? { backgroundColor: colors.warningSubtle }
+                      : null,
+                  ]}
+                >
+                  <Text style={[styles.rankText, { color: colors.textPrimary }]}>
+                    {index + 1}
+                  </Text>
                 </View>
-                <Text style={styles.sub}>Total compras: {formatCurrency(item.total_compras)}</Text>
-              </View>
-            </Pressable>
+                <Avatar nombre={item.nombre} size="sm" />
+                <View style={{ flex: 1, marginLeft: spacing.md }}>
+                  <Text
+                    style={[styles.nombre, { color: colors.textPrimary }]}
+                    numberOfLines={1}
+                  >
+                    {item.nombre}
+                  </Text>
+                  <View style={styles.metaRow}>
+                    <LealtadBadge nivel={item.nivel_lealtad} size="sm" />
+                    <Text style={[styles.puntos, { color: colors.accent }]}>
+                      {item.puntos_actuales} pts
+                    </Text>
+                  </View>
+                  <Text style={[styles.sub, { color: colors.textMuted }]}>
+                    Total compras: {formatCurrency(item.total_compras)}
+                  </Text>
+                </View>
+              </Pressable>
+            </FadeInItem>
           )}
         />
       )}
@@ -105,31 +165,31 @@ export default function LealtadRankingScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  list: { flex: 1, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border },
+  safe: { flex: 1 },
+  list: { flex: 1, borderTopWidth: 1 },
   listContent: { paddingBottom: spacing.xxl },
-  listWrapper: { paddingHorizontal: spacing.lg },
-  skelItem: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.surface, borderRadius: radius.md,
-    padding: spacing.md, marginBottom: spacing.sm,
-  },
   row: {
-    flexDirection: 'row', alignItems: 'center',
-    padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    borderBottomWidth: 1,
     gap: spacing.sm,
   },
-  rowPressed: { backgroundColor: colors.surfacePressed },
   rank: {
-    width: 26, height: 26, borderRadius: 13,
-    backgroundColor: colors.bgSubtle, alignItems: 'center', justifyContent: 'center',
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  rank1: { backgroundColor: '#FEF3C7' },
-  rank2: { backgroundColor: '#E5E7EB' },
-  rank3: { backgroundColor: '#FED7AA' },
-  rankText: { ...typography.bodyBold, color: colors.textPrimary },
-  nombre: { ...typography.bodyBold, color: colors.textPrimary },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 4 },
-  puntos: { ...typography.small, color: colors.accent, fontFamily: typography.button.fontFamily },
-  sub: { ...typography.small, color: colors.textMuted, marginTop: 2 },
+  rankText: { ...typography.bodyBold },
+  nombre: { ...typography.bodyBold },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: 4,
+  },
+  puntos: { ...typography.small, fontFamily: typography.button.fontFamily },
+  sub: { ...typography.small, marginTop: 2 },
 });

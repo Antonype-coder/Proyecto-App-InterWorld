@@ -5,7 +5,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 
-import { colors, spacing, typography } from '@theme/index';
+import { spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
+import { useSuccessPulse } from '@hooks/useSuccessPulse';
 import { proveedorSchema, type ProveedorFormData } from '@utils/validators';
 import { proveedoresApi } from '@api/index';
 import type { MasStackParamList } from '@tipos/index';
@@ -14,6 +16,7 @@ import TopBar from '@components/layout/TopBar';
 import Card from '@components/ui/Card';
 import Button from '@components/ui/Button';
 import Toast from '@components/ui/Toast';
+import { SuccessPulse } from '@components/feedback';
 import FormInput from '@components/forms/FormInput';
 import type { ToastVariant } from '@tipos/index';
 
@@ -24,33 +27,30 @@ export default function ProveedorFormScreen(): React.ReactElement {
   const route = useRoute<Params>();
   const proveedorId = route.params?.proveedorId;
   const editando = typeof proveedorId === 'number';
+  const colors = useColors();
 
   const [loading, setLoading] = useState(editando);
   const [saving, setSaving] = useState(false);
+  const [pulseVisible, triggerPulse] = useSuccessPulse();
   const [toast, setToast] = useState<{
     visible: boolean;
     message: string;
     variant: ToastVariant;
   }>({ visible: false, message: '', variant: 'info' });
 
-  const {
-    control,
-    handleSubmit,
-    reset,
-    setValue,
-    watch,
-  } = useForm<ProveedorFormData>({
-    resolver: zodResolver(proveedorSchema) as never,
-    defaultValues: {
-      nombre: '',
-      contacto: '',
-      telefono: '',
-      email: '',
-      direccion: '',
-      notas: '',
-      activo: true,
-    },
-  });
+  const { control, handleSubmit, reset, setValue, watch } =
+    useForm<ProveedorFormData>({
+      resolver: zodResolver(proveedorSchema) as never,
+      defaultValues: {
+        nombre: '',
+        contacto: '',
+        telefono: '',
+        email: '',
+        direccion: '',
+        notas: '',
+        activo: true,
+      },
+    });
 
   const activo = watch('activo') ?? true;
 
@@ -89,17 +89,14 @@ export default function ProveedorFormScreen(): React.ReactElement {
         notas: data.notas?.trim() || undefined,
         activo: data.activo ? 1 : 0,
       };
-
       if (editando && proveedorId) {
         await proveedoresApi.actualizar(proveedorId, payload);
       } else {
         await proveedoresApi.crear(payload);
       }
-
-      await Haptics.notificationAsync(
-        Haptics.NotificationFeedbackType.Success,
-      );
-      navigation.goBack();
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerPulse();
+      setTimeout(() => navigation.goBack(), 700);
     } catch (e) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const msg = e instanceof Error ? e.message : 'Error al guardar';
@@ -110,77 +107,14 @@ export default function ProveedorFormScreen(): React.ReactElement {
   };
 
   return (
-    <KeyboardScreen>
-      <TopBar
-        title={editando ? 'Editar proveedor' : 'Nuevo proveedor'}
-        onBack={() => navigation.goBack()}
-      />
-
-      <View style={styles.content}>
-        <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Datos del proveedor</Text>
-          <FormInput
-            control={control}
-            name="nombre"
-            label="Nombre"
-            icon="truck-outline"
-            required
-          />
-          <FormInput
-            control={control}
-            name="contacto"
-            label="Contacto"
-            placeholder="Persona de contacto"
-            icon="account-outline"
-          />
-          <FormInput
-            control={control}
-            name="telefono"
-            label="Teléfono"
-            keyboardType="phone-pad"
-            icon="phone-outline"
-          />
-          <FormInput
-            control={control}
-            name="email"
-            label="Correo electrónico"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            icon="email-outline"
-          />
-          <FormInput
-            control={control}
-            name="direccion"
-            label="Dirección"
-            placeholder="Dirección del proveedor"
-            icon="map-marker-outline"
-          />
-          <FormInput
-            control={control}
-            name="notas"
-            label="Notas"
-            placeholder="Observaciones o condiciones"
-            icon="text-box-outline"
-            multiline
-          />
-        </Card>
-
-        <Card variant="default" style={styles.section}>
-          <View style={styles.switchRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.switchLabel}>Proveedor activo</Text>
-              <Text style={styles.switchHelper}>
-                Se podrá usar en productos y órdenes de compra.
-              </Text>
-            </View>
-            <Switch
-              value={activo}
-              onValueChange={(value) => setValue('activo', value, { shouldDirty: true })}
-              trackColor={{ true: colors.primary, false: colors.border }}
-            />
-          </View>
-        </Card>
-
+    <KeyboardScreen
+      header={
+        <TopBar
+          title={editando ? 'Editar proveedor' : 'Nuevo proveedor'}
+          onBack={() => navigation.goBack()}
+        />
+      }
+      footer={
         <Button
           label={editando ? 'Guardar cambios' : 'Crear proveedor'}
           onPress={() => {
@@ -192,7 +126,77 @@ export default function ProveedorFormScreen(): React.ReactElement {
           size="lg"
           fullWidth
         />
-      </View>
+      }
+    >
+      <Card variant="default" style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+          Datos del proveedor
+        </Text>
+        <FormInput
+          control={control}
+          name="nombre"
+          label="Nombre"
+          icon="truck-outline"
+          required
+        />
+        <FormInput
+          control={control}
+          name="contacto"
+          label="Contacto"
+          placeholder="Persona de contacto"
+          icon="account-outline"
+        />
+        <FormInput
+          control={control}
+          name="telefono"
+          label="Teléfono"
+          keyboardType="phone-pad"
+          icon="phone-outline"
+        />
+        <FormInput
+          control={control}
+          name="email"
+          label="Correo electrónico"
+          keyboardType="email-address"
+          autoCapitalize="none"
+          icon="email-outline"
+        />
+        <FormInput
+          control={control}
+          name="direccion"
+          label="Dirección"
+          placeholder="Dirección del proveedor"
+          icon="map-marker-outline"
+        />
+        <FormInput
+          control={control}
+          name="notas"
+          label="Notas"
+          placeholder="Observaciones o condiciones"
+          icon="text-box-outline"
+          multiline
+        />
+      </Card>
+
+      <Card variant="default" style={styles.section}>
+        <View style={styles.switchRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.switchLabel, { color: colors.textPrimary }]}>
+              Proveedor activo
+            </Text>
+            <Text style={[styles.switchHelper, { color: colors.textMuted }]}>
+              Se podrá usar en productos y órdenes de compra.
+            </Text>
+          </View>
+          <Switch
+            value={activo}
+            onValueChange={(value) =>
+              setValue('activo', value, { shouldDirty: true })
+            }
+            trackColor={{ true: colors.primary, false: colors.border }}
+          />
+        </View>
+      </Card>
 
       <Toast
         visible={toast.visible}
@@ -200,23 +204,19 @@ export default function ProveedorFormScreen(): React.ReactElement {
         variant={toast.variant}
         onHide={() => setToast((t) => ({ ...t, visible: false }))}
       />
+
+      <SuccessPulse
+        visible={pulseVisible}
+        label={editando ? 'Proveedor actualizado' : 'Proveedor creado'}
+      />
     </KeyboardScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.lg, paddingBottom: spacing.giant },
   section: { marginBottom: spacing.md },
-  sectionTitle: {
-    ...typography.h3,
-    color: colors.textPrimary,
-    marginBottom: spacing.lg,
-  },
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  switchLabel: { ...typography.bodyBold, color: colors.textPrimary },
-  switchHelper: { ...typography.small, color: colors.textMuted, marginTop: 2 },
+  sectionTitle: { ...typography.h3, marginBottom: spacing.lg },
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  switchLabel: { ...typography.bodyBold },
+  switchHelper: { ...typography.small, marginTop: 2 },
 });

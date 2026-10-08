@@ -1,7 +1,9 @@
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, radius, typography } from '@theme/index';
+import { radius, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
+import type { AppColors } from '@theme/index';
 import type { BadgeVariant } from '@tipos/index';
 
 interface BadgeProps {
@@ -19,7 +21,8 @@ export default function Badge({
   size = 'md',
   style,
 }: BadgeProps): React.ReactElement {
-  const palette = getPalette(variant);
+  const colors = useColors();
+  const palette = getPalette(variant, colors);
   const isSmall = size === 'sm';
 
   return (
@@ -58,7 +61,10 @@ export default function Badge({
   );
 }
 
-function getPalette(variant: BadgeVariant): { bg: string; text: string } {
+function getPalette(
+  variant: BadgeVariant,
+  colors: AppColors,
+): { bg: string; text: string } {
   switch (variant) {
     case 'success':
       return { bg: colors.successSubtle, text: colors.successText };

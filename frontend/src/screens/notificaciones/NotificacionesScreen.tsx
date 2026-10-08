@@ -1,204 +1,200 @@
-import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Pressable } from 'react-native';
+import React, { useCallback, useMemo, useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  FlatList,
+  RefreshControl,
+  ScrollView,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import * as Haptics from 'expo-haptics';
 
-import { colors, radius, spacing, typography } from '@theme/index';
-import { useNotificacionesStore } from '@store/notificacionesStore';
-import { formatDateTime } from '@utils/format';
+import { spacing } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 import TopBar from '@components/layout/TopBar';
-import EmptyState from '@components/ui/EmptyState';
-import Button from '@components/ui/Button';
-import Loader from '@components/ui/Loader';
+import { notificacionesApi } from '@api/index';
+import type { Notificacion } from '@tipos/index';
+import { FadeInItem } from '@components/animations';
+import NotificacionItem from '@components/domain/NotificacionItem';
+import RichEmptyState from '@components/ui/RichEmptyState';
+import SkeletonVenta from '@components/ui/SkeletonVenta';
+import ErrorState from '@components/feedback/ErrorState';
+import Chip from '@components/ui/Chip';
+
+type Filtro = 'todas' | 'no_leidas';
 
 export default function NotificacionesScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
-  const {
-    items,
-    noLeidas,
-    loading,
-    cargar,
-    marcarLeida,
-    marcarTodas,
-  } = useNotificacionesStore();
+  const colors = useColors();
+  const [items, setItems] = useState<Notificacion[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [filtro, setFiltro] = useState<Filtro>('todas');
+
+  const cargar = useCallback(async (): Promise<void> => {
+    setError(null);
+    try {
+      const res = await notificacionesApi.listar();
+      setItems(res.items);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Error al cargar');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
+      setLoading(true);
       void cargar();
     }, [cargar]),
   );
 
-  return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <TopBar title="Notificaciones" onBack={() => navigation.goBack()} />
+  const marcarTodas = async (): Promise<void> => {
+    try {
+      await notificacionesApi.marcarTodas();
+      await Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      );
+      setItems((actuales) => actuales.map((n) => ({ ...n, leida: 1 })));
+    } catch {
+      // Silencioso
+    }
+  };
 
-      {noLeidas > 0 ? (
-        <View style={styles.actionsBar}>
-          <Text style={styles.pendingText}>
-            {noLeidas} sin leer
-          </Text>
-          <Button
-            label="Marcar todas"
-            onPress={() => void marcarTodas()}
-            variant="ghost"
-            size="sm"
-          />
-        </View>
-      ) : null}
+  const noLeidas = useMemo(
+    () => items.filter((n) => !n.leida).length,
+    [items],
+  );
+
+  const filtrados = useMemo(
+    () => (filtro === 'no_leidas' ? items.filter((n) => !n.leida) : items),
+    [items, filtro],
+  );
+
+  return (
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+      edges={['top']}
+    >
+      <TopBar
+        title="Notificaciones"
+        subtitle={
+          noLeidas > 0
+            ? `${noLeidas} sin leer`
+            : `${items.length} ${
+                items.length === 1 ? 'notificación' : 'notificaciones'
+              }`
+        }
+        onBack={() => navigation.goBack()}
+        rightIcon="check-all"
+        rightLabel="Marcar leídas"
+        onRightPress={noLeidas > 0 ? marcarTodas : undefined}
+      />
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chipsRow}
+        style={styles.chipsScroll}
+      >
+        <Chip
+          label="Todas"
+          active={filtro === 'todas'}
+          onPress={() => setFiltro('todas')}
+        />
+        <Chip
+          label={`Sin leer${noLeidas > 0 ? ` (${noLeidas})` : ''}`}
+          active={filtro === 'no_leidas'}
+          onPress={() => setFiltro('no_leidas')}
+        />
+      </ScrollView>
 
       {loading && items.length === 0 ? (
-        <Loader message="Cargando notificaciones" />
-      ) : items.length === 0 ? (
-        <EmptyState
-          icon="bell-outline"
-          title="Sin notificaciones"
-          description="Cuando ocurra algo importante, aparecerá aquí."
+        <View>
+          {[1, 2, 3, 4].map((i) => (
+            <SkeletonVenta key={i} />
+          ))}
+        </View>
+      ) : error && items.length === 0 ? (
+        <ErrorState
+          title="No pudimos cargar las notificaciones"
+          message="Revisa tu conexión e intenta de nuevo."
+          technicalMessage={error}
+          onRetry={cargar}
+        />
+      ) : filtrados.length === 0 ? (
+        <RichEmptyState
+          icon={filtro === 'no_leidas' ? 'bell-check-outline' : 'bell-outline'}
+          title={filtro === 'no_leidas' ? 'Todo al día' : 'Sin notificaciones'}
+          description={
+            filtro === 'no_leidas'
+              ? 'No tienes notificaciones pendientes.'
+              : 'Aquí verás avisos importantes de tu negocio.'
+          }
         />
       ) : (
         <FlatList
-          data={items}
+          data={filtrados}
           keyExtractor={(item) => String(item.id)}
+          style={[
+            styles.list,
+            {
+              backgroundColor: colors.surface,
+              borderTopColor: colors.border,
+            },
+          ]}
           contentContainerStyle={styles.listContent}
-          renderItem={({ item }) => {
-            const cfg = getNivelConfig(item.nivel);
-            const noLeida = item.leida === 0;
-
-            return (
-              <Pressable
-                onPress={() => {
-                  if (noLeida) void marcarLeida(item.id);
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => {
+                setRefreshing(true);
+                void cargar();
+              }}
+              tintColor={colors.textSecondary}
+            />
+          }
+          renderItem={({ item, index }) => (
+            <FadeInItem delay={Math.min(index * 20, 240)}>
+              <NotificacionItem
+                notificacion={item}
+                onPress={async () => {
+                  if (!item.leida) {
+                    try {
+                      await notificacionesApi.marcarLeida(item.id);
+                      setItems((actuales) =>
+                        actuales.map((n) =>
+                          n.id === item.id ? { ...n, leida: 1 } : n,
+                        ),
+                      );
+                    } catch {
+                      // Silencioso
+                    }
+                  }
                 }}
-                style={({ pressed }) => [
-                  styles.row,
-                  !noLeida ? styles.rowRead : null,
-                  pressed ? styles.rowPressed : null,
-                ]}
-              >
-                <View style={[styles.iconWrap, { backgroundColor: cfg.bg }]}>
-                  <MaterialCommunityIcons
-                    name={cfg.icon}
-                    size={18}
-                    color={cfg.color}
-                  />
-                </View>
-                <View style={styles.info}>
-                  <View style={styles.titleRow}>
-                    <Text
-                      style={[
-                        styles.titulo,
-                        noLeida ? styles.tituloUnread : null,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {item.titulo}
-                    </Text>
-                    {noLeida ? <View style={styles.dot} /> : null}
-                  </View>
-                  <Text style={styles.mensaje} numberOfLines={2}>
-                    {item.mensaje}
-                  </Text>
-                  <Text style={styles.fecha}>
-                    {formatDateTime(item.created_at)}
-                  </Text>
-                </View>
-              </Pressable>
-            );
-          }}
+              />
+            </FadeInItem>
+          )}
         />
       )}
     </SafeAreaView>
   );
 }
 
-function getNivelConfig(nivel: string): {
-  bg: string;
-  color: string;
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
-} {
-  switch (nivel) {
-    case 'success':
-      return {
-        bg: colors.successSubtle,
-        color: colors.success,
-        icon: 'check-circle-outline',
-      };
-    case 'warning':
-      return {
-        bg: colors.warningSubtle,
-        color: colors.warning,
-        icon: 'alert-outline',
-      };
-    case 'danger':
-      return {
-        bg: colors.dangerSubtle,
-        color: colors.danger,
-        icon: 'alert-circle-outline',
-      };
-    case 'info':
-    default:
-      return {
-        bg: colors.infoSubtle,
-        color: colors.info,
-        icon: 'information-outline',
-      };
-  }
-}
-
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  actionsBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  safe: { flex: 1 },
+  chipsScroll: { flexGrow: 0, maxHeight: 60, marginBottom: spacing.sm },
+  chipsRow: {
     paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  pendingText: { ...typography.caption, color: colors.textSecondary },
-  listContent: { padding: spacing.lg },
-  row: {
-    flexDirection: 'row',
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-    gap: spacing.md,
-  },
-  rowRead: { opacity: 0.7 },
-  rowPressed: { opacity: 0.6 },
-  iconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  info: { flex: 1 },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
     gap: spacing.sm,
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
   },
-  titulo: { ...typography.body, color: colors.textSecondary, flex: 1 },
-  tituloUnread: {
-    ...typography.bodyBold,
-    color: colors.textPrimary,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.accent,
-  },
-  mensaje: {
-    ...typography.small,
-    color: colors.textSecondary,
-    marginTop: 2,
-  },
-  fecha: { ...typography.tiny, color: colors.textMuted, marginTop: 4 },
+  list: { flex: 1, borderTopWidth: 1 },
+  listContent: { paddingBottom: spacing.xxl },
 });

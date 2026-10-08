@@ -1,35 +1,48 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
-import { colors, spacing } from '@theme/index';
+import { View, StyleSheet, ViewStyle } from 'react-native';
+import { colors } from '@theme/index';
 
 interface ProgressDotsProps {
   total: number;
   current: number;
+  style?: ViewStyle;
 }
 
 export default function ProgressDots({
   total,
   current,
+  style,
 }: ProgressDotsProps): React.ReactElement {
   return (
-    <View style={styles.container}>
-      {Array.from({ length: total }).map((_, i) => (
-        <View
-          key={i}
-          style={[styles.dot, i === current ? styles.dotActive : null]}
-        />
-      ))}
+    <View style={[styles.row, style]} accessibilityRole="progressbar">
+      {Array.from({ length: total }).map((_, index) => {
+        const active = index === current;
+        return (
+          <View
+            key={index}
+            style={[styles.dot, active ? styles.dotActive : null]}
+          />
+        );
+      })}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flexDirection: 'row', gap: spacing.sm, justifyContent: 'center' },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
   dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: colors.borderStrong,
   },
-  dotActive: { backgroundColor: colors.primary, width: 24 },
+  dotActive: {
+    width: 20,
+    backgroundColor: colors.primary,
+  },
 });

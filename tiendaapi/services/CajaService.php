@@ -106,6 +106,36 @@ if (!class_exists('CajaService')) {
             return $stmt->fetchAll() ?: [];
         }
 
+        /**
+         * Calcula los totales de la sesión. Los métodos de pago NO efectivo
+         * (tarjeta, transferencia) NO entran al efectivo físico esperado.
+         *
+         * Efectivo esperado = apertura + ventas_efectivo + ingresos_manuales - egresos
+         */
+        private function calcularTotales(int $sesionId): array
+        {
+            $stmt = $this->db->prepare(
+                "SELECT
+                    COALESCE(SUM(CASE WHEN tipo = 'venta' AND metodo_pago = 'efectivo' THEN monto ELSE 0 END), 0) AS ventas_efectivo,
+                    COALESCE(SUM(CASE WHEN tipo = 'venta' AND metodo_pago = 'tarjeta' THEN monto ELSE 0 END), 0) AS ventas_tarjeta,
+                    COALESCE(SUM(CASE WHEN tipo = 'venta' AND metodo_pago = 'transferencia' THEN monto ELSE 0 END), 0) AS ventas_transferencia,
+                    COALESCE(SUM(CASE WHEN tipo = 'ingreso' THEN monto ELSE 0 END), 0) AS ingresos_manuales,
+                    COALESCE(SUM(CASE WHEN tipo IN ('egreso','devolucion') THEN monto ELSE 0 END), 0) AS egresos
+                 FROM caja_movimientos
+                 WHERE caja_sesion_id = :sid"
+            );
+            $stmt->execute(['sid' => $sesionId]);
+            $row = $stmt->fetch() ?: [];
+
+            return [
+                'ventas_efectivo'       => (float) ($row['ventas_efectivo'] ?? 0),
+                'ventas_tarjeta'        => (float) ($row['ventas_tarjeta'] ?? 0),
+                'ventas_transferencia'  => (float) ($row['ventas_transferencia'] ?? 0),
+                'ingresos_manuales'     => (float) ($row['ingresos_manuales'] ?? 0),
+                'egresos'               => (float) ($row['egresos'] ?? 0),
+            ];
+        }
+
         public function cerrar(int $sesionId, int $usuarioId, float $montoDeclarado, ?string $notas): array
         {
             return $this->transaction(function () use ($sesionId, $montoDeclarado, $notas) {
@@ -114,49 +144,53 @@ if (!class_exists('CajaService')) {
                     throw new BusinessException('La caja ya está cerrada.');
                 }
 
-                $stmt = $this->db->prepare(
-                    "SELECT
-                        COALESCE(SUM(CASE WHEN tipo IN ('venta','ingreso') AND metodo_pago = 'efectivo' THEN monto ELSE 0 END), 0) AS efectivo,
-                        COALESCE(SUM(CASE WHEN tipo IN ('venta','ingreso') AND metodo_pago = 'tarjeta' THEN monto ELSE 0 END), 0) AS tarjeta,
-                        COALESCE(SUM(CASE WHEN tipo IN ('venta','ingreso') AND metodo_pago = 'transferencia' THEN monto ELSE 0 END), 0) AS transferencia,
-                        COALESCE(SUM(CASE WHEN tipo IN ('venta','ingreso') THEN monto ELSE 0 END), 0) AS ingresos,
-                        COALESCE(SUM(CASE WHEN tipo IN ('egreso','devolucion') THEN monto ELSE 0 END), 0) AS egresos
-                     FROM caja_movimientos WHERE caja_sesion_id = :sid"
-                );
-                $stmt->execute(['sid' => $sesionId]);
-                $totales = $stmt->fetch() ?: [];
+                $totales = $this->calcularTotales($sesionId);
+                $apertura = (float) $sesion['monto_apertura'];
 
-                $montoSistema = round((float) $sesion['monto_apertura']
-                                    + (float) ($totales['efectivo'] ?? 0)
-                                    - (float) ($totales['egresos'] ?? 0), 2);
-                $diferencia   = round($montoDeclarado - $montoSistema, 2);
+                // Efectivo físico que debería haber en caja.
+                $efectivoEsperado = round(
+                    $apertura
+                    + $totales['ventas_efectivo']
+                    + $totales['ingresos_manuales']
+                    - $totales['egresos'],
+                    2
+                );
+
+                $diferencia = round($montoDeclarado - $efectivoEsperado, 2);
 
                 $upd = $this->db->prepare(
                     "UPDATE caja_sesiones SET
                         estado = 'cerrada',
-                        monto_cierre_declarado = :declarado,
-                        monto_cierre_sistema   = :sistema,
-                        diferencia             = :diff,
-                        total_ventas_efectivo      = :efectivo,
-                        total_ventas_tarjeta       = :tarjeta,
-                        total_ventas_transferencia = :transf,
-                        total_ingresos             = :ingresos,
-                        total_egresos              = :egresos,
+                        monto_cierre_declarado      = :declarado,
+                        monto_cierre_sistema        = :sistema,
+                        diferencia                  = :diff,
+                        total_ventas_efectivo       = :v_efectivo,
+                        total_ventas_tarjeta        = :v_tarjeta,
+                        total_ventas_transferencia  = :v_transf,
+                        total_ingresos              = :ingresos,
+                        total_egresos               = :egresos,
                         notas_cierre = :notas,
                         cerrada_at   = NOW()
                      WHERE id = :id"
                 );
                 $upd->execute([
-                    'declarado' => number_format($montoDeclarado, 2, '.', ''),
-                    'sistema'   => number_format($montoSistema, 2, '.', ''),
-                    'diff'      => number_format($diferencia, 2, '.', ''),
-                    'efectivo'  => number_format((float) ($totales['efectivo'] ?? 0), 2, '.', ''),
-                    'tarjeta'   => number_format((float) ($totales['tarjeta'] ?? 0), 2, '.', ''),
-                    'transf'    => number_format((float) ($totales['transferencia'] ?? 0), 2, '.', ''),
-                    'ingresos'  => number_format((float) ($totales['ingresos'] ?? 0), 2, '.', ''),
-                    'egresos'   => number_format((float) ($totales['egresos'] ?? 0), 2, '.', ''),
-                    'notas'     => $notas,
-                    'id'        => $sesionId,
+                    'declarado'   => number_format($montoDeclarado, 2, '.', ''),
+                    'sistema'     => number_format($efectivoEsperado, 2, '.', ''),
+                    'diff'        => number_format($diferencia, 2, '.', ''),
+                    'v_efectivo'  => number_format($totales['ventas_efectivo'], 2, '.', ''),
+                    'v_tarjeta'   => number_format($totales['ventas_tarjeta'], 2, '.', ''),
+                    'v_transf'    => number_format($totales['ventas_transferencia'], 2, '.', ''),
+                    'ingresos'    => number_format($totales['ingresos_manuales'], 2, '.', ''),
+                    'egresos'     => number_format($totales['egresos'], 2, '.', ''),
+                    'notas'       => $notas,
+                    'id'          => $sesionId,
+                ]);
+
+                Logger::info('Caja cerrada', [
+                    'sesion_id'  => $sesionId,
+                    'declarado'  => $montoDeclarado,
+                    'esperado'   => $efectivoEsperado,
+                    'diferencia' => $diferencia,
                 ]);
 
                 return $this->obtenerSesion($sesionId);

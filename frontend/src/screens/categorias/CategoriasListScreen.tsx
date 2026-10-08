@@ -7,25 +7,33 @@ import {
   TextInput,
   Pressable,
   RefreshControl,
-  Alert,
   Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
+import { useConfirm } from '@components/feedback/ConfirmProvider';
+import { useUIStore } from '@store/uiStore';
 import TopBar from '@components/layout/TopBar';
 import { categoriasApi } from '@api/index';
 import type { Categoria } from '@tipos/index';
 import { useDebounce } from '@hooks/useDebounce';
-import EmptyState from '@components/ui/EmptyState';
-import Skeleton from '@components/ui/Skeleton';
+import { FadeInItem } from '@components/animations';
+import RichEmptyState from '@components/ui/RichEmptyState';
+import SkeletonProducto from '@components/ui/SkeletonProducto';
+import ErrorState from '@components/feedback/ErrorState';
 import FAB from '@components/ui/FAB';
 import { getHiddenCatalogIds, hideCatalogId } from '@utils/hiddenCatalogItems';
 
 export default function CategoriasListScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
+  const colors = useColors();
+  const confirm = useConfirm();
+  const showToast = useUIStore((s) => s.showToast);
+
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -45,7 +53,7 @@ export default function CategoriasListScreen(): React.ReactElement {
         categoriasApi.listar(),
         getHiddenCatalogIds('categories'),
       ]);
-      setCategorias(data.filter((categoria) => !hiddenIds.has(categoria.id)));
+      setCategorias(data.filter((c) => !hiddenIds.has(c.id)));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar');
     } finally {
@@ -62,77 +70,89 @@ export default function CategoriasListScreen(): React.ReactElement {
   );
 
   const categoriasFiltradas = categorias
-    .filter((categoria) => {
-      const coincideBusqueda = `${categoria.nombre} ${categoria.descripcion ?? ''}`
+    .filter((c) => {
+      const coincideBusqueda = `${c.nombre} ${c.descripcion ?? ''}`
         .toLowerCase()
         .includes(debouncedBusqueda.toLowerCase());
-      const coincideEstado = mostrarInactivas || categoria.activo === 1;
+      const coincideEstado = mostrarInactivas || c.activo === 1;
       return coincideBusqueda && coincideEstado;
     })
     .sort((a, b) => {
-      const compare = a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' });
+      const compare = a.nombre.localeCompare(b.nombre, 'es', {
+        sensitivity: 'base',
+      });
       return ordenAsc ? compare : -compare;
     });
 
-  const eliminarCategoria = (categoria: Categoria): void => {
-    Alert.alert(
-      'Borrar categoría definitivamente',
-      `Se eliminará "${categoria.nombre}" y no se podrá recuperar. ¿Deseas continuar?`,
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Borrar definitivamente',
-          style: 'destructive',
-          onPress: async () => {
-            setEliminandoId(categoria.id);
-            try {
-              await categoriasApi.eliminar(categoria.id);
-              await hideCatalogId('categories', categoria.id);
-              setCategorias((actuales) =>
-                actuales.filter((item) => item.id !== categoria.id),
-              );
-              Alert.alert(
-                'Categoría quitada',
-                'La categoría se quitó de esta lista correctamente.',
-              );
-            } catch (e) {
-              const msg = e instanceof Error ? e.message : 'No se pudo borrar la categoría';
-              Alert.alert('Error', msg);
-            } finally {
-              setEliminandoId(null);
-            }
-          },
-        },
-      ],
-    );
+  const eliminarCategoria = async (categoria: Categoria): Promise<void> => {
+    const ok = await confirm({
+      title: 'Borrar categoría definitivamente',
+      message: `Se eliminará "${categoria.nombre}" y no se podrá recuperar.`,
+      confirmLabel: 'Borrar',
+      variant: 'danger',
+    });
+    if (!ok) return;
+
+    setEliminandoId(categoria.id);
+    try {
+      await categoriasApi.eliminar(categoria.id);
+      await hideCatalogId('categories', categoria.id);
+      setCategorias((actuales) =>
+        actuales.filter((item) => item.id !== categoria.id),
+      );
+      showToast('Categoría eliminada.', 'success');
+    } catch (e) {
+      const msg =
+        e instanceof Error ? e.message : 'No se pudo borrar la categoría';
+      showToast(msg, 'error');
+    } finally {
+      setEliminandoId(null);
+    }
   };
 
-  const cambiarEstadoCategoria = async (categoria: Categoria): Promise<void> => {
+  const cambiarEstadoCategoria = async (
+    categoria: Categoria,
+  ): Promise<void> => {
     const activo = categoria.activo === 1 ? 0 : 1;
     setActualizandoId(categoria.id);
     try {
       await categoriasApi.actualizar(categoria.id, { activo });
       setCategorias((actuales) =>
-        actuales.map((item) => (item.id === categoria.id ? { ...item, activo } : item)),
+        actuales.map((item) =>
+          item.id === categoria.id ? { ...item, activo } : item,
+        ),
       );
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'No se pudo cambiar el estado';
-      Alert.alert('Error', msg);
+      const msg =
+        e instanceof Error ? e.message : 'No se pudo cambiar el estado';
+      showToast(msg, 'error');
     } finally {
       setActualizandoId(null);
     }
   };
 
+  const hayFiltro = busqueda.length > 0 || mostrarInactivas;
+
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+      edges={['top']}
+    >
       <TopBar
         title="Categorías"
-        subtitle={`${categoriasFiltradas.length} ${categoriasFiltradas.length === 1 ? 'categoría' : 'categorías'}`}
+        subtitle={`${categoriasFiltradas.length} ${
+          categoriasFiltradas.length === 1 ? 'categoría' : 'categorías'
+        }`}
         onBack={() => navigation.goBack()}
       />
 
       <View style={styles.searchWrapper}>
-        <View style={styles.searchBox}>
+        <View
+          style={[
+            styles.searchBox,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
           <MaterialCommunityIcons
             name="magnify"
             size={18}
@@ -143,7 +163,7 @@ export default function CategoriasListScreen(): React.ReactElement {
             placeholderTextColor={colors.textMuted}
             value={busqueda}
             onChangeText={setBusqueda}
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: colors.textPrimary }]}
             autoCapitalize="none"
             autoCorrect={false}
           />
@@ -153,65 +173,87 @@ export default function CategoriasListScreen(): React.ReactElement {
       <View style={styles.configRow}>
         <Pressable
           onPress={() => setMostrarInactivas((prev) => !prev)}
-          style={styles.toggleChip}
+          style={[
+            styles.toggleChip,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
         >
           <Switch
             value={mostrarInactivas}
             onValueChange={setMostrarInactivas}
             trackColor={{ true: colors.primary, false: colors.border }}
           />
-          <Text style={styles.toggleText}>Mostrar inactivas</Text>
+          <Text style={[styles.toggleText, { color: colors.textPrimary }]}>
+            Mostrar inactivas
+          </Text>
         </Pressable>
         <Pressable
           onPress={() => setOrdenAsc((prev) => !prev)}
-          style={styles.orderChip}
+          style={[
+            styles.orderChip,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
         >
           <MaterialCommunityIcons
             name={ordenAsc ? 'sort-ascending' : 'sort-descending'}
             size={16}
             color={colors.textPrimary}
           />
-          <Text style={styles.toggleText}>{ordenAsc ? 'A-Z' : 'Z-A'}</Text>
+          <Text style={[styles.toggleText, { color: colors.textPrimary }]}>
+            {ordenAsc ? 'A-Z' : 'Z-A'}
+          </Text>
         </Pressable>
       </View>
 
-      {loading ? (
-        <View style={styles.listWrapper}>
+      {loading && categorias.length === 0 ? (
+        <View>
           {[1, 2, 3, 4].map((i) => (
-            <View key={i} style={styles.skelItem}>
-              <Skeleton width={40} height={40} borderRadius={8} />
-              <View style={{ flex: 1, marginLeft: spacing.md }}>
-                <Skeleton width="60%" height={14} />
-                <Skeleton width="35%" height={12} style={{ marginTop: 6 }} />
-              </View>
-            </View>
+            <SkeletonProducto key={i} />
           ))}
         </View>
-      ) : error ? (
-        <EmptyState
-          icon="alert-circle-outline"
-          title="Error al cargar"
-          description={error}
-          actionLabel="Reintentar"
-          onAction={cargar}
+      ) : error && categorias.length === 0 ? (
+        <ErrorState
+          title="No pudimos cargar las categorías"
+          message="Revisa tu conexión e intenta de nuevo."
+          technicalMessage={error}
+          onRetry={cargar}
         />
       ) : categoriasFiltradas.length === 0 ? (
-        <EmptyState
-          icon="shape-outline"
-          title="Sin categorías"
+        <RichEmptyState
+          icon={hayFiltro ? 'magnify-close' : 'shape-outline'}
+          title={hayFiltro ? 'Sin resultados' : 'Sin categorías aún'}
           description={
             busqueda
-              ? 'No hay categorías que coincidan con tu búsqueda.'
-              : 'Aún no has agregado categorías.'
+              ? 'Prueba con otro término.'
+              : 'Crea categorías para organizar tu catálogo.'
           }
-          actionLabel="Agregar categoría"
-          onAction={() => navigation.navigate('CategoriaForm' as never)}
+          actionLabel={!hayFiltro ? 'Agregar categoría' : undefined}
+          onAction={
+            !hayFiltro
+              ? () => navigation.navigate('CategoriaForm' as never)
+              : undefined
+          }
+          secondaryLabel={hayFiltro ? 'Limpiar filtros' : undefined}
+          onSecondary={
+            hayFiltro
+              ? () => {
+                  setBusqueda('');
+                  setMostrarInactivas(false);
+                }
+              : undefined
+          }
         />
       ) : (
         <FlatList
           data={categoriasFiltradas}
           keyExtractor={(item) => String(item.id)}
-          style={styles.list}
+          style={[
+            styles.list,
+            {
+              backgroundColor: colors.surface,
+              borderTopColor: colors.border,
+            },
+          ]}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
@@ -223,66 +265,108 @@ export default function CategoriasListScreen(): React.ReactElement {
               tintColor={colors.textSecondary}
             />
           }
-          renderItem={({ item }) => (
-            <View style={[styles.row, item.activo !== 1 ? styles.inactiveRow : null]}>
-              <Pressable
-                disabled={actualizandoId === item.id || eliminandoId === item.id}
-                onPress={() =>
-                  navigation.navigate(
-                    'CategoriaForm' as never,
-                    { categoriaId: item.id } as never,
-                  )
-                }
-                style={styles.rowBodyPressable}
+          renderItem={({ item, index }) => (
+            <FadeInItem delay={Math.min(index * 20, 240)}>
+              <View
+                style={[
+                  styles.row,
+                  { borderBottomColor: colors.border },
+                  item.activo !== 1 ? styles.inactiveRow : null,
+                ]}
               >
-                <View style={styles.iconWrap}>
+                <Pressable
+                  disabled={
+                    actualizandoId === item.id || eliminandoId === item.id
+                  }
+                  onPress={() =>
+                    navigation.navigate(
+                      'CategoriaForm' as never,
+                      { categoriaId: item.id } as never,
+                    )
+                  }
+                  style={styles.rowBodyPressable}
+                >
+                  <View
+                    style={[
+                      styles.iconWrap,
+                      { backgroundColor: colors.primarySubtle },
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name="shape-outline"
+                      size={20}
+                      color={colors.primary}
+                    />
+                  </View>
+                  <View style={styles.rowBody}>
+                    <Text
+                      style={[styles.rowTitle, { color: colors.textPrimary }]}
+                    >
+                      {item.nombre}
+                    </Text>
+                    <Text
+                      style={[styles.rowSubtitle, { color: colors.textMuted }]}
+                      numberOfLines={2}
+                    >
+                      {item.activo === 1
+                        ? 'Activa'
+                        : 'Inactiva · No se negocia actualmente'}
+                      {item.descripcion ? ` · ${item.descripcion}` : ''}
+                    </Text>
+                  </View>
                   <MaterialCommunityIcons
-                    name="shape-outline"
-                    size={20}
-                    color={colors.primary}
+                    name="chevron-right"
+                    size={18}
+                    color={colors.textMuted}
                   />
-                </View>
-                <View style={styles.rowBody}>
-                  <Text style={styles.rowTitle}>{item.nombre}</Text>
-                  <Text style={styles.rowSubtitle} numberOfLines={2}>
-                    {item.activo === 1 ? 'Activa' : 'Inactiva · No se negocia actualmente'}
-                    {item.descripcion ? ` · ${item.descripcion}` : ''}
-                  </Text>
-                </View>
-                <MaterialCommunityIcons
-                  name="chevron-right"
-                  size={18}
-                  color={colors.textMuted}
-                />
-              </Pressable>
-              <Pressable
-                onPress={() => void cambiarEstadoCategoria(item)}
-                disabled={actualizandoId === item.id || eliminandoId === item.id}
-                style={styles.statusBtn}
-                accessibilityRole="button"
-                accessibilityLabel={item.activo === 1 ? 'Marcar categoría inactiva' : 'Reactivar categoría'}
-              >
-                <MaterialCommunityIcons
-                  name={item.activo === 1 ? 'archive-outline' : 'restore'}
-                  size={18}
-                  color={item.activo === 1 ? colors.textSecondary : colors.success}
-                />
-              </Pressable>
-              <Pressable
-                onPress={() => eliminarCategoria(item)}
-                disabled={actualizandoId === item.id || eliminandoId === item.id}
-                style={styles.deleteBtn}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel="Borrar categoría definitivamente"
-              >
-                <MaterialCommunityIcons
-                  name="delete-outline"
-                  size={18}
-                  color={colors.danger}
-                />
-              </Pressable>
-            </View>
+                </Pressable>
+                <Pressable
+                  onPress={() => void cambiarEstadoCategoria(item)}
+                  disabled={
+                    actualizandoId === item.id || eliminandoId === item.id
+                  }
+                  style={[
+                    styles.statusBtn,
+                    { backgroundColor: colors.bgSubtle },
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    item.activo === 1
+                      ? 'Marcar categoría inactiva'
+                      : 'Reactivar categoría'
+                  }
+                >
+                  <MaterialCommunityIcons
+                    name={item.activo === 1 ? 'archive-outline' : 'restore'}
+                    size={18}
+                    color={
+                      item.activo === 1
+                        ? colors.textSecondary
+                        : colors.success
+                    }
+                  />
+                </Pressable>
+                <Pressable
+                  onPress={() => void eliminarCategoria(item)}
+                  disabled={
+                    actualizandoId === item.id || eliminandoId === item.id
+                  }
+                  style={[
+                    styles.deleteBtn,
+                    { backgroundColor: colors.dangerSubtle },
+                  ]}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Borrar categoría definitivamente"
+                >
+                  <MaterialCommunityIcons
+                    name="delete-outline"
+                    size={18}
+                    color={colors.danger}
+                  />
+                </Pressable>
+              </View>
+            </FadeInItem>
           )}
         />
       )}
@@ -297,14 +381,12 @@ export default function CategoriasListScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
+  safe: { flex: 1 },
   searchWrapper: { paddingHorizontal: spacing.lg, marginBottom: spacing.sm },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     height: 40,
@@ -312,7 +394,6 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     ...typography.body,
-    color: colors.textPrimary,
     marginLeft: spacing.sm,
     paddingVertical: 0,
   },
@@ -328,10 +409,8 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.border,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     gap: spacing.sm,
@@ -339,31 +418,21 @@ const styles = StyleSheet.create({
   orderChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.border,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     gap: spacing.xs,
   },
-  toggleText: { ...typography.small, color: colors.textPrimary },
-  list: { flex: 1, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border },
+  toggleText: { ...typography.small },
+  list: { flex: 1, borderTopWidth: 1 },
   listContent: { paddingBottom: 100 },
-  listWrapper: { paddingHorizontal: spacing.lg },
-  skelItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.lg,
-  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
     gap: spacing.md,
   },
   inactiveRow: { opacity: 0.7 },
@@ -377,18 +446,16 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: radius.md,
-    backgroundColor: colors.primarySubtle,
     alignItems: 'center',
     justifyContent: 'center',
   },
   rowBody: { flex: 1 },
-  rowTitle: { ...typography.bodyBold, color: colors.textPrimary },
-  rowSubtitle: { ...typography.small, color: colors.textMuted, marginTop: 3 },
+  rowTitle: { ...typography.bodyBold },
+  rowSubtitle: { ...typography.small, marginTop: 3 },
   deleteBtn: {
     width: 34,
     height: 34,
     borderRadius: 8,
-    backgroundColor: colors.dangerSubtle,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -396,9 +463,8 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 8,
-    backgroundColor: colors.bgSubtle,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  fab: { bottom: spacing.lg },
+  fab: { position: 'absolute', right: spacing.lg, bottom: spacing.lg },
 });

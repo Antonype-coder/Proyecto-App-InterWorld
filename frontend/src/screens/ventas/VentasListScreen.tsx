@@ -12,13 +12,16 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 import { ventasApi } from '@api/index';
 import type { VentaResumen } from '@tipos/index';
 import { useDebounce } from '@hooks/useDebounce';
+import { FadeInItem } from '@components/animations';
 import VentaItem from '@components/domain/VentaItem';
-import EmptyState from '@components/ui/EmptyState';
-import Skeleton from '@components/ui/Skeleton';
+import RichEmptyState from '@components/ui/RichEmptyState';
+import SkeletonVenta from '@components/ui/SkeletonVenta';
+import ErrorState from '@components/feedback/ErrorState';
 import Chip from '@components/ui/Chip';
 
 type FiltroEstado = 'todas' | 'completada' | 'anulada';
@@ -26,6 +29,7 @@ type FiltroPago = 'todos' | 'contado' | 'credito';
 
 export default function VentasListScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
+  const colors = useColors();
   const [ventas, setVentas] = useState<VentaResumen[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -61,19 +65,35 @@ export default function VentasListScreen(): React.ReactElement {
     }, [cargar]),
   );
 
+  const hayFiltro =
+    filtroEstado !== 'todas' || filtroPago !== 'todos' || busqueda.length > 0;
+
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+      edges={['top']}
+    >
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Ventas</Text>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.title, { color: colors.textPrimary }]}>
+            Ventas
+          </Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             {ventas.length} {ventas.length === 1 ? 'venta' : 'ventas'}
           </Text>
         </View>
       </View>
 
       <View style={styles.searchWrapper}>
-        <View style={styles.searchBox}>
+        <View
+          style={[
+            styles.searchBox,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}
+        >
           <MaterialCommunityIcons
             name="magnify"
             size={18}
@@ -84,7 +104,7 @@ export default function VentasListScreen(): React.ReactElement {
             placeholderTextColor={colors.textMuted}
             value={busqueda}
             onChangeText={setBusqueda}
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: colors.textPrimary }]}
           />
         </View>
       </View>
@@ -110,7 +130,9 @@ export default function VentasListScreen(): React.ReactElement {
           active={filtroEstado === 'anulada'}
           onPress={() => setFiltroEstado('anulada')}
         />
-        <View style={styles.chipsDivider} />
+        <View
+          style={[styles.chipsDivider, { backgroundColor: colors.border }]}
+        />
         <Chip
           label="Contado"
           active={filtroPago === 'contado'}
@@ -123,41 +145,50 @@ export default function VentasListScreen(): React.ReactElement {
         />
       </ScrollView>
 
-      {loading ? (
-        <View style={styles.listWrapper}>
+      {loading && ventas.length === 0 ? (
+        <View>
           {[1, 2, 3, 4, 5].map((i) => (
-            <View key={i} style={styles.skelItem}>
-              <Skeleton width={36} height={36} borderRadius={8} />
-              <View style={{ flex: 1, marginLeft: spacing.md }}>
-                <Skeleton width="60%" height={14} />
-                <Skeleton
-                  width="40%"
-                  height={12}
-                  style={{ marginTop: 6 }}
-                />
-              </View>
-            </View>
+            <SkeletonVenta key={i} />
           ))}
         </View>
-      ) : error ? (
-        <EmptyState
-          icon="alert-circle-outline"
-          title="Error al cargar"
-          description={error}
-          actionLabel="Reintentar"
-          onAction={cargar}
+      ) : error && ventas.length === 0 ? (
+        <ErrorState
+          title="No pudimos cargar las ventas"
+          message="Revisa tu conexión e intenta de nuevo."
+          technicalMessage={error}
+          onRetry={cargar}
         />
       ) : ventas.length === 0 ? (
-        <EmptyState
-          icon="receipt"
-          title="Sin ventas"
-          description="No hay ventas con este filtro."
+        <RichEmptyState
+          icon={hayFiltro ? 'magnify-close' : 'receipt'}
+          title={hayFiltro ? 'Sin resultados' : 'Aún no hay ventas'}
+          description={
+            hayFiltro
+              ? 'Prueba con otro término o quita los filtros.'
+              : 'Cuando registres la primera venta, aparecerá aquí.'
+          }
+          secondaryLabel={hayFiltro ? 'Limpiar filtros' : undefined}
+          onSecondary={
+            hayFiltro
+              ? () => {
+                  setBusqueda('');
+                  setFiltroEstado('todas');
+                  setFiltroPago('todos');
+                }
+              : undefined
+          }
         />
       ) : (
         <FlatList
           data={ventas}
           keyExtractor={(item) => String(item.id)}
-          style={styles.list}
+          style={[
+            styles.list,
+            {
+              backgroundColor: colors.surface,
+              borderTopColor: colors.border,
+            },
+          ]}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
@@ -169,16 +200,18 @@ export default function VentasListScreen(): React.ReactElement {
               tintColor={colors.textSecondary}
             />
           }
-          renderItem={({ item }) => (
-            <VentaItem
-              venta={item}
-              onPress={() =>
-                navigation.navigate(
-                  'VentaDetalle' as never,
-                  { ventaId: item.id } as never,
-                )
-              }
-            />
+          renderItem={({ item, index }) => (
+            <FadeInItem delay={Math.min(index * 20, 240)}>
+              <VentaItem
+                venta={item}
+                onPress={() =>
+                  navigation.navigate(
+                    'VentaDetalle' as never,
+                    { ventaId: item.id } as never,
+                  )
+                }
+              />
+            </FadeInItem>
           )}
         />
       )}
@@ -187,16 +220,15 @@ export default function VentasListScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
+  safe: { flex: 1 },
   header: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.lg,
   },
-  title: { ...typography.h1, color: colors.textPrimary },
+  title: { ...typography.h1 },
   subtitle: {
     ...typography.caption,
-    color: colors.textSecondary,
     marginTop: 2,
   },
   searchWrapper: {
@@ -206,9 +238,7 @@ const styles = StyleSheet.create({
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     height: 40,
@@ -216,7 +246,6 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     ...typography.body,
-    color: colors.textPrimary,
     marginLeft: spacing.sm,
     paddingVertical: 0,
   },
@@ -229,23 +258,11 @@ const styles = StyleSheet.create({
   chipsDivider: {
     width: 1,
     height: 20,
-    backgroundColor: colors.border,
     marginHorizontal: spacing.xs,
   },
   list: {
     flex: 1,
-    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
   },
   listContent: { paddingBottom: spacing.xxl },
-  listWrapper: { paddingHorizontal: spacing.lg },
-  skelItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
 });

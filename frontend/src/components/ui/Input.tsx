@@ -9,7 +9,8 @@ import {
   ViewStyle,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 
 interface InputProps extends Omit<TextInputProps, 'style'> {
   label?: string;
@@ -40,12 +41,14 @@ const Input = forwardRef<TextInput, InputProps>(function Input(
   },
   ref,
 ) {
+  const colors = useColors();
   const [focused, setFocused] = useState(false);
   const [visible, setVisible] = useState(false);
 
   const isPassword = rest.secureTextEntry === true;
   const showAsPassword = isPassword && !visible;
   const hasError = Boolean(error);
+
   const borderColor = hasError
     ? colors.danger
     : focused
@@ -56,15 +59,22 @@ const Input = forwardRef<TextInput, InputProps>(function Input(
     <View style={[styles.container, containerStyle]}>
       {label ? (
         <View style={styles.labelRow}>
-          <Text style={styles.label}>{label}</Text>
-          {required ? <Text style={styles.required}>*</Text> : null}
+          <Text style={[styles.label, { color: colors.textPrimary }]}>
+            {label}
+          </Text>
+          {required ? (
+            <Text style={[styles.required, { color: colors.danger }]}>*</Text>
+          ) : null}
         </View>
       ) : null}
 
       <View
         style={[
           styles.inputWrapper,
-          { borderColor },
+          {
+            backgroundColor: editable ? colors.surface : colors.bgSubtle,
+            borderColor,
+          },
           focused ? styles.inputWrapperFocused : null,
           !editable ? styles.inputWrapperDisabled : null,
         ]}
@@ -93,7 +103,11 @@ const Input = forwardRef<TextInput, InputProps>(function Input(
             onBlur?.(e);
           }}
           placeholderTextColor={colors.textMuted}
-          style={[styles.input, icon ? styles.inputWithIcon : null]}
+          style={[
+            styles.input,
+            { color: colors.textPrimary },
+            icon ? styles.inputWithIcon : null,
+          ]}
           accessibilityLabel={label}
         />
 
@@ -102,7 +116,9 @@ const Input = forwardRef<TextInput, InputProps>(function Input(
             onPress={() => setVisible((v) => !v)}
             hitSlop={8}
             style={styles.rightAction}
-            accessibilityLabel={visible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            accessibilityLabel={
+              visible ? 'Ocultar contraseña' : 'Mostrar contraseña'
+            }
           >
             <MaterialCommunityIcons
               name={visible ? 'eye-off-outline' : 'eye-outline'}
@@ -135,10 +151,12 @@ const Input = forwardRef<TextInput, InputProps>(function Input(
             size={14}
             color={colors.danger}
           />
-          <Text style={styles.error}>{error}</Text>
+          <Text style={[styles.error, { color: colors.danger }]}>{error}</Text>
         </View>
       ) : helper ? (
-        <Text style={styles.helper}>{helper}</Text>
+        <Text style={[styles.helper, { color: colors.textMuted }]}>
+          {helper}
+        </Text>
       ) : null}
     </View>
   );
@@ -153,30 +171,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
-  label: { ...typography.bodyBold, color: colors.textPrimary },
+  label: { ...typography.bodyBold },
   required: {
     ...typography.bodyBold,
-    color: colors.danger,
     marginLeft: 3,
   },
   inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
     borderWidth: 1,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     minHeight: 44,
   },
   inputWrapperFocused: { borderWidth: 1.5 },
-  inputWrapperDisabled: {
-    backgroundColor: colors.bgSubtle,
-    opacity: 0.6,
-  },
+  inputWrapperDisabled: { opacity: 0.6 },
   input: {
     flex: 1,
     ...typography.body,
-    color: colors.textPrimary,
     paddingVertical: spacing.md,
   },
   inputWithIcon: { paddingLeft: spacing.sm },
@@ -188,10 +200,9 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     gap: 4,
   },
-  error: { ...typography.small, color: colors.danger },
+  error: { ...typography.small },
   helper: {
     ...typography.small,
-    color: colors.textMuted,
     marginTop: spacing.sm,
   },
 });

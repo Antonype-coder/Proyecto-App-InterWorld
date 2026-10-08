@@ -1,14 +1,6 @@
 import React, { useCallback, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  Alert,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   useFocusEffect,
@@ -18,18 +10,20 @@ import {
 } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
+import { useReturnTo } from '@hooks/useReturnTo';
+import { useConfirm } from '@components/feedback/ConfirmProvider';
 import { productosApi } from '@api/index';
 import { useAuthStore } from '@store/authStore';
+import { useUIStore } from '@store/uiStore';
 import type { Producto, ProductosStackParamList } from '@tipos/index';
 import { formatCurrency } from '@utils/format';
 import Badge from '@components/ui/Badge';
 import Button from '@components/ui/Button';
 import Card from '@components/ui/Card';
 import Loader from '@components/ui/Loader';
-import EmptyState from '@components/ui/EmptyState';
-import Toast from '@components/ui/Toast';
-import type { ToastVariant } from '@tipos/index';
+import ErrorState from '@components/feedback/ErrorState';
 import TopBar from '@components/layout/TopBar';
 import ProductoImageCarousel from '@components/domain/ProductoImageCarousel';
 
@@ -39,6 +33,10 @@ export default function ProductoDetalleScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
   const route = useRoute<Params>();
   const productId = route.params.productId;
+  const colors = useColors();
+  const goTo = useReturnTo();
+  const confirm = useConfirm();
+  const showToast = useUIStore((s) => s.showToast);
 
   const user = useAuthStore((s) => s.user);
   const esAdmin = user?.rol === 'admin';
@@ -46,11 +44,6 @@ export default function ProductoDetalleScreen(): React.ReactElement {
   const [producto, setProducto] = useState<Producto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<{
-    visible: boolean;
-    message: string;
-    variant: ToastVariant;
-  }>({ visible: false, message: '', variant: 'info' });
 
   const cargar = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -71,35 +64,36 @@ export default function ProductoDetalleScreen(): React.ReactElement {
     }, [cargar]),
   );
 
-  const desactivar = (): void => {
-    Alert.alert(
-      'Desactivar producto',
-      'El producto dejará de aparecer en el POS.',
-      [
-        { text: 'Cancelar', style: 'cancel' },
-        {
-          text: 'Desactivar',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await productosApi.eliminar(productId);
-              await Haptics.notificationAsync(
-                Haptics.NotificationFeedbackType.Success,
-              );
-              navigation.goBack();
-            } catch (e) {
-              const msg = e instanceof Error ? e.message : 'Error al desactivar';
-              setToast({ visible: true, message: msg, variant: 'error' });
-            }
-          },
-        },
-      ],
-    );
+  const desactivar = async (): Promise<void> => {
+    const ok = await confirm({
+      title: 'Desactivar producto',
+      message:
+        'El producto dejará de aparecer en el POS. Puedes reactivarlo cuando quieras.',
+      confirmLabel: 'Desactivar',
+      variant: 'warning',
+    });
+    if (!ok) return;
+
+    try {
+      await productosApi.eliminar(productId);
+      await Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      );
+      showToast('Producto desactivado.', 'success');
+      navigation.goBack();
+    } catch (e) {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      const msg = e instanceof Error ? e.message : 'Error al desactivar';
+      showToast(msg, 'error');
+    }
   };
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top']}>
+      <SafeAreaView
+        style={[styles.safe, { backgroundColor: colors.bg }]}
+        edges={['top']}
+      >
         <Header onBack={() => navigation.goBack()} />
         <Loader message="Cargando producto" />
       </SafeAreaView>
@@ -108,23 +102,28 @@ export default function ProductoDetalleScreen(): React.ReactElement {
 
   if (error || !producto) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top']}>
+      <SafeAreaView
+        style={[styles.safe, { backgroundColor: colors.bg }]}
+        edges={['top']}
+      >
         <Header onBack={() => navigation.goBack()} />
-        <EmptyState
-          icon="alert-circle-outline"
-          title="No se pudo cargar"
-          description={error ?? 'Producto no encontrado'}
-          actionLabel="Reintentar"
-          onAction={cargar}
+        <ErrorState
+          title="No pudimos cargar el producto"
+          message="Revisa tu conexión e intenta de nuevo."
+          technicalMessage={error ?? undefined}
+          onRetry={cargar}
         />
       </SafeAreaView>
     );
   }
 
-  const stockInfo = getStockInfo(producto.stock, producto.stock_minimo);
+  const stockInfo = getStockInfo(producto.stock, producto.stock_minimo, colors);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+      edges={['top']}
+    >
       <Header
         onBack={() => navigation.goBack()}
         onEdit={
@@ -144,11 +143,21 @@ export default function ProductoDetalleScreen(): React.ReactElement {
       >
         <View style={styles.hero}>
           <ProductoImageCarousel
-            images={producto.imagenes?.length ? producto.imagenes : producto.imagen ? [producto.imagen] : []}
+            images={
+              producto.imagenes?.length
+                ? producto.imagenes
+                : producto.imagen
+                  ? [producto.imagen]
+                  : []
+            }
             height={220}
           />
-          <Text style={styles.nombre}>{producto.nombre}</Text>
-          <Text style={styles.codigo}>{producto.codigo_barras}</Text>
+          <Text style={[styles.nombre, { color: colors.textPrimary }]}>
+            {producto.nombre}
+          </Text>
+          <Text style={[styles.codigo, { color: colors.textMuted }]}>
+            {producto.codigo_barras}
+          </Text>
           <View style={styles.badgeRow}>
             <Badge label={stockInfo.label} variant={stockInfo.variant} />
             <Badge
@@ -159,28 +168,46 @@ export default function ProductoDetalleScreen(): React.ReactElement {
         </View>
 
         <View style={styles.priceRow}>
-          <View style={styles.priceCard}>
-            <Text style={styles.priceLabel}>Precio de venta</Text>
-            <Text style={styles.priceValue}>
+          <View
+            style={[
+              styles.priceCard,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <Text style={[styles.priceLabel, { color: colors.textSecondary }]}>
+              Precio de venta
+            </Text>
+            <Text style={[styles.priceValue, { color: colors.textPrimary }]}>
               {formatCurrency(producto.precio_venta)}
             </Text>
           </View>
-          <View style={styles.priceCard}>
-            <Text style={styles.priceLabel}>Precio de compra</Text>
-            <Text style={styles.priceValue}>
+          <View
+            style={[
+              styles.priceCard,
+              { backgroundColor: colors.surface, borderColor: colors.border },
+            ]}
+          >
+            <Text style={[styles.priceLabel, { color: colors.textSecondary }]}>
+              Precio de compra
+            </Text>
+            <Text style={[styles.priceValue, { color: colors.textPrimary }]}>
               {formatCurrency(producto.precio_compra)}
             </Text>
           </View>
         </View>
 
         <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Stock</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+            Stock
+          </Text>
           <View style={styles.stockRow}>
             <View>
-              <Text style={styles.stockValue}>
+              <Text style={[styles.stockValue, { color: colors.textPrimary }]}>
                 {producto.stock} unidades
               </Text>
-              <Text style={styles.stockMinimo}>
+              <Text
+                style={[styles.stockMinimo, { color: colors.textMuted }]}
+              >
                 Mínimo: {producto.stock_minimo}
               </Text>
             </View>
@@ -199,13 +226,7 @@ export default function ProductoDetalleScreen(): React.ReactElement {
                 variant="outline"
                 icon="swap-horizontal"
                 onPress={() =>
-                  navigation.navigate(
-                    'Mas' as never,
-                    {
-                      screen: 'MovimientoForm',
-                      params: { productoId: productId },
-                    } as never,
-                  )
+                  goTo('Mas', 'MovimientoForm', { productoId: productId })
                 }
                 fullWidth
               />
@@ -214,7 +235,9 @@ export default function ProductoDetalleScreen(): React.ReactElement {
         </Card>
 
         <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Información</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+            Información
+          </Text>
           <InfoRow
             icon="shape-outline"
             label="Categoría"
@@ -239,18 +262,13 @@ export default function ProductoDetalleScreen(): React.ReactElement {
             label="Desactivar producto"
             variant="danger"
             icon="trash-can-outline"
-            onPress={desactivar}
+            onPress={() => {
+              void desactivar();
+            }}
             fullWidth
           />
         ) : null}
       </ScrollView>
-
-      <Toast
-        visible={toast.visible}
-        message={toast.message}
-        variant={toast.variant}
-        onHide={() => setToast((t) => ({ ...t, visible: false }))}
-      />
     </SafeAreaView>
   );
 }
@@ -274,16 +292,21 @@ function InfoRow(props: {
   label: string;
   value: string;
 }): React.ReactElement {
+  const colors = useColors();
   return (
-    <View style={styles.infoRow}>
+    <View style={[styles.infoRow, { borderTopColor: colors.border }]}>
       <MaterialCommunityIcons
         name={props.icon}
         size={16}
         color={colors.textMuted}
       />
       <View style={styles.infoText}>
-        <Text style={styles.infoLabel}>{props.label}</Text>
-        <Text style={styles.infoValue}>{props.value}</Text>
+        <Text style={[styles.infoLabel, { color: colors.textMuted }]}>
+          {props.label}
+        </Text>
+        <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
+          {props.value}
+        </Text>
       </View>
     </View>
   );
@@ -292,6 +315,7 @@ function InfoRow(props: {
 function getStockInfo(
   stock: number,
   minimo: number,
+  colors: ReturnType<typeof useColors>,
 ): {
   label: string;
   variant: 'success' | 'warning' | 'danger';
@@ -305,33 +329,11 @@ function getStockInfo(
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  topbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topbarTitle: { ...typography.h3, color: colors.textPrimary },
+  safe: { flex: 1 },
   scroll: { padding: spacing.lg, paddingBottom: spacing.giant },
   hero: { alignItems: 'center', marginBottom: spacing.xl },
-  nombre: {
-    ...typography.h2,
-    color: colors.textPrimary,
-    textAlign: 'center',
-  },
-  codigo: { ...typography.caption, color: colors.textMuted, marginTop: 4 },
+  nombre: { ...typography.h2, textAlign: 'center' },
+  codigo: { ...typography.caption, marginTop: 4 },
   badgeRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },
   priceRow: {
     flexDirection: 'row',
@@ -340,45 +342,30 @@ const styles = StyleSheet.create({
   },
   priceCard: {
     flex: 1,
-    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: radius.lg,
     padding: spacing.md,
   },
-  priceLabel: { ...typography.small, color: colors.textSecondary },
-  priceValue: {
-    ...typography.price,
-    color: colors.textPrimary,
-    marginTop: spacing.xs,
-  },
+  priceLabel: { ...typography.small },
+  priceValue: { ...typography.price, marginTop: spacing.xs },
   section: { marginBottom: spacing.md },
-  sectionTitle: {
-    ...typography.h3,
-    color: colors.textPrimary,
-    marginBottom: spacing.md,
-  },
+  sectionTitle: { ...typography.h3, marginBottom: spacing.md },
   stockRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  stockValue: { ...typography.h3, color: colors.textPrimary },
-  stockMinimo: { ...typography.small, color: colors.textMuted, marginTop: 2 },
+  stockValue: { ...typography.h3 },
+  stockMinimo: { ...typography.small, marginTop: 2 },
   stockDot: { width: 12, height: 12, borderRadius: 6 },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingVertical: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
     gap: spacing.md,
   },
   infoText: { flex: 1 },
-  infoLabel: { ...typography.small, color: colors.textMuted },
-  infoValue: {
-    ...typography.body,
-    color: colors.textPrimary,
-    marginTop: 2,
-  },
+  infoLabel: { ...typography.small },
+  infoValue: { ...typography.body, marginTop: 2 },
 });

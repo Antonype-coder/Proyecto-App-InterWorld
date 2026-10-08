@@ -1,7 +1,9 @@
 import React from 'react';
-import { Pressable, StyleSheet, ViewStyle } from 'react-native';
+import { Pressable, StyleSheet, ViewStyle, Animated } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, radius, shadows } from '@theme/index';
+import { radius, shadows } from '@theme/index';
+import { useColors } from '@hooks/useColors';
+import { usePressAnimation } from '@hooks/usePressAnimation';
 
 interface FABProps {
   icon?: keyof typeof MaterialCommunityIcons.glyphMap;
@@ -16,37 +18,43 @@ export default function FAB({
   onPress,
   accessibilityLabel = 'Acción',
   style,
-  color = colors.primary,
+  color,
 }: FABProps): React.ReactElement {
+  const colors = useColors();
+  const bg = color ?? colors.primary;
+  const press = usePressAnimation({ scaleTo: 0.92, opacityTo: 0.9 });
+
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      style={({ pressed }) => [
-        styles.base,
-        { backgroundColor: color },
-        pressed ? styles.pressed : null,
-        style,
-      ]}
-    >
-      <MaterialCommunityIcons
-        name={icon}
-        size={22}
-        color={colors.textInverse}
-      />
-    </Pressable>
+    <Animated.View style={[styles.wrapper, press.style, style]}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={press.onPressIn}
+        onPressOut={press.onPressOut}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        style={[styles.base, { backgroundColor: bg }, shadows.lg]}
+      >
+        <MaterialCommunityIcons
+          name={icon}
+          size={22}
+          color={colors.textInverse}
+        />
+      </Pressable>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    position: 'absolute',
+    right: 0,
+    bottom: 0,
+  },
   base: {
     width: 52,
     height: 52,
     borderRadius: radius.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    ...shadows.lg,
   },
-  pressed: { opacity: 0.85 },
 });

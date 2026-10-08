@@ -1,18 +1,33 @@
 import React from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  View,
+  ViewStyle,
+} from 'react-native';
 import { colors, spacing, typography } from '@theme/index';
 
 interface LoaderProps {
   message?: string;
   fullScreen?: boolean;
+  style?: ViewStyle;
 }
 
 export default function Loader({
   message,
-  fullScreen = true,
+  fullScreen = false,
+  style,
 }: LoaderProps): React.ReactElement {
   return (
-    <View style={[styles.container, fullScreen ? styles.fullScreen : null]}>
+    <View
+      style={[
+        fullScreen ? styles.fullScreen : styles.inline,
+        style,
+      ]}
+      accessibilityRole="progressbar"
+      accessibilityLabel={message ?? 'Cargando'}
+    >
       <ActivityIndicator size="small" color={colors.textSecondary} />
       {message ? <Text style={styles.message}>{message}</Text> : null}
     </View>
@@ -20,12 +35,21 @@ export default function Loader({
 }
 
 const styles = StyleSheet.create({
-  container: {
+  fullScreen: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    padding: spacing.xl,
     gap: spacing.md,
+    backgroundColor: colors.bg,
   },
-  fullScreen: { flex: 1 },
-  message: { ...typography.caption, color: colors.textMuted },
+  inline: {
+    paddingVertical: spacing.xxl,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  message: {
+    ...typography.caption,
+    color: colors.textSecondary,
+  },
 });

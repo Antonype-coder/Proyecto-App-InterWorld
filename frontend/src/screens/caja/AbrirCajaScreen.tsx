@@ -1,23 +1,25 @@
 import React, { useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 
-import { spacing } from '@theme/index';
+import { spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
+import { useSmartBack } from '@hooks/useReturnTo';
+import { useSuccessPulse } from '@hooks/useSuccessPulse';
 import { cajaApi } from '@api/index';
 import KeyboardScreen from '@components/layout/KeyboardScreen';
 import TopBar from '@components/layout/TopBar';
 import Card from '@components/ui/Card';
 import Button from '@components/ui/Button';
 import Toast from '@components/ui/Toast';
+import { SuccessPulse } from '@components/feedback';
 import FormNumberInput from '@components/forms/FormNumberInput';
 import FormInput from '@components/forms/FormInput';
 import type { ToastVariant } from '@tipos/index';
-import { Text } from 'react-native';
-import { colors, typography } from '@theme/index';
 
 const abrirSchema = z.object({
   monto_apertura: z.coerce.number().min(0, 'No puede ser negativo'),
@@ -28,7 +30,10 @@ type AbrirForm = z.infer<typeof abrirSchema>;
 
 export default function AbrirCajaScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
+  const colors = useColors();
+  const goBack = useSmartBack();
   const [saving, setSaving] = useState(false);
+  const [pulseVisible, triggerPulse] = useSuccessPulse();
   const [toast, setToast] = useState<{
     visible: boolean;
     message: string;
@@ -50,7 +55,8 @@ export default function AbrirCajaScreen(): React.ReactElement {
       await Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
       );
-      navigation.goBack();
+      triggerPulse();
+      setTimeout(() => goBack(), 700);
     } catch (e) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const msg = e instanceof Error ? e.message : 'Error al abrir caja';
@@ -61,33 +67,9 @@ export default function AbrirCajaScreen(): React.ReactElement {
   };
 
   return (
-    <KeyboardScreen>
-      <TopBar title="Abrir caja" onBack={() => navigation.goBack()} />
-
-      <View style={styles.content}>
-        <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Monto inicial</Text>
-          <Text style={styles.helper}>
-            Ingresa el efectivo con el que inicias tu turno.
-          </Text>
-          <FormNumberInput
-            control={control}
-            name="monto_apertura"
-            label="Monto de apertura"
-            icon="cash"
-          />
-        </Card>
-
-        <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Notas (opcional)</Text>
-          <FormInput
-            control={control}
-            name="notas_apertura"
-            label="Notas"
-            multiline
-          />
-        </Card>
-
+    <KeyboardScreen
+      header={<TopBar title="Abrir caja" onBack={goBack} />}
+      footer={
         <Button
           label="Abrir caja"
           onPress={() => {
@@ -99,7 +81,34 @@ export default function AbrirCajaScreen(): React.ReactElement {
           size="lg"
           fullWidth
         />
-      </View>
+      }
+    >
+      <Card variant="default" style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+          Monto inicial
+        </Text>
+        <Text style={[styles.helper, { color: colors.textMuted }]}>
+          Ingresa el efectivo con el que inicias tu turno.
+        </Text>
+        <FormNumberInput
+          control={control}
+          name="monto_apertura"
+          label="Monto de apertura"
+          icon="cash"
+        />
+      </Card>
+
+      <Card variant="default" style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+          Notas (opcional)
+        </Text>
+        <FormInput
+          control={control}
+          name="notas_apertura"
+          label="Notas"
+          multiline
+        />
+      </Card>
 
       <Toast
         visible={toast.visible}
@@ -107,21 +116,20 @@ export default function AbrirCajaScreen(): React.ReactElement {
         variant={toast.variant}
         onHide={() => setToast((t) => ({ ...t, visible: false }))}
       />
+
+      <SuccessPulse visible={pulseVisible} label="Caja abierta" />
     </KeyboardScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.lg, paddingBottom: spacing.giant },
   section: { marginBottom: spacing.md },
   sectionTitle: {
     ...typography.h3,
-    color: colors.textPrimary,
     marginBottom: spacing.sm,
   },
   helper: {
     ...typography.small,
-    color: colors.textMuted,
     marginBottom: spacing.lg,
   },
 });

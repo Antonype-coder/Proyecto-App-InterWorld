@@ -12,18 +12,22 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 import TopBar from '@components/layout/TopBar';
 import { clientesApi } from '@api/index';
 import type { Cliente } from '@tipos/index';
 import { useDebounce } from '@hooks/useDebounce';
+import { FadeInItem } from '@components/animations';
 import ClienteItem from '@components/domain/ClienteItem';
 import FAB from '@components/ui/FAB';
-import EmptyState from '@components/ui/EmptyState';
-import Skeleton from '@components/ui/Skeleton';
+import RichEmptyState from '@components/ui/RichEmptyState';
+import SkeletonProducto from '@components/ui/SkeletonProducto';
+import ErrorState from '@components/feedback/ErrorState';
 
 export default function ClientesListScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
+  const colors = useColors();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -60,16 +64,31 @@ export default function ClientesListScreen(): React.ReactElement {
     ? clientes.filter((c) => parseFloat(c.saldo_deuda) > 0)
     : clientes;
 
+  const hayFiltro = busqueda.length > 0 || soloConDeuda;
+
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+      edges={['top']}
+    >
       <TopBar
         title="Clientes"
-        subtitle={`${clientesFiltrados.length} ${clientesFiltrados.length === 1 ? 'cliente' : 'clientes'}`}
+        subtitle={`${clientesFiltrados.length} ${
+          clientesFiltrados.length === 1 ? 'cliente' : 'clientes'
+        }`}
         onBack={() => navigation.goBack()}
       />
 
       <View style={styles.searchWrapper}>
-        <View style={styles.searchBox}>
+        <View
+          style={[
+            styles.searchBox,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}
+        >
           <MaterialCommunityIcons
             name="magnify"
             size={18}
@@ -80,7 +99,7 @@ export default function ClientesListScreen(): React.ReactElement {
             placeholderTextColor={colors.textMuted}
             value={busqueda}
             onChangeText={setBusqueda}
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: colors.textPrimary }]}
           />
         </View>
       </View>
@@ -97,6 +116,8 @@ export default function ClientesListScreen(): React.ReactElement {
         <Text
           style={[
             styles.toggleText,
+            { color: colors.textMuted },
+            soloConDeuda ? { color: colors.textPrimary } : null,
             soloConDeuda ? styles.toggleTextActive : null,
           ]}
         >
@@ -104,43 +125,43 @@ export default function ClientesListScreen(): React.ReactElement {
         </Text>
       </Pressable>
 
-      {loading ? (
-        <View style={styles.listWrapper}>
+      {loading && clientes.length === 0 ? (
+        <View>
           {[1, 2, 3, 4, 5].map((i) => (
-            <View key={i} style={styles.skelItem}>
-              <Skeleton width={40} height={40} borderRadius={20} />
-              <View style={{ flex: 1, marginLeft: spacing.md }}>
-                <Skeleton width="60%" height={14} />
-                <Skeleton
-                  width="40%"
-                  height={12}
-                  style={{ marginTop: 6 }}
-                />
-              </View>
-            </View>
+            <SkeletonProducto key={i} />
           ))}
         </View>
-      ) : error ? (
-        <EmptyState
-          icon="alert-circle-outline"
-          title="Error al cargar"
-          description={error}
-          actionLabel="Reintentar"
-          onAction={cargar}
+      ) : error && clientes.length === 0 ? (
+        <ErrorState
+          title="No pudimos cargar los clientes"
+          message="Revisa tu conexión e intenta de nuevo."
+          technicalMessage={error}
+          onRetry={cargar}
         />
       ) : clientesFiltrados.length === 0 ? (
-        <EmptyState
-          icon="account-group-outline"
-          title="Sin clientes"
+        <RichEmptyState
+          icon={hayFiltro ? 'account-search-outline' : 'account-group-outline'}
+          title={hayFiltro ? 'Sin resultados' : 'Sin clientes aún'}
           description={
             soloConDeuda
               ? 'Ningún cliente tiene deuda pendiente.'
-              : 'Aún no has agregado clientes.'
+              : busqueda
+                ? 'Prueba con otro término.'
+                : 'Registra tu primer cliente para gestionar créditos y ventas.'
           }
-          actionLabel={!soloConDeuda ? 'Agregar cliente' : undefined}
+          actionLabel={!hayFiltro ? 'Agregar cliente' : undefined}
           onAction={
-            !soloConDeuda
+            !hayFiltro
               ? () => navigation.navigate('ClienteForm' as never)
+              : undefined
+          }
+          secondaryLabel={hayFiltro ? 'Limpiar filtros' : undefined}
+          onSecondary={
+            hayFiltro
+              ? () => {
+                  setBusqueda('');
+                  setSoloConDeuda(false);
+                }
               : undefined
           }
         />
@@ -148,7 +169,13 @@ export default function ClientesListScreen(): React.ReactElement {
         <FlatList
           data={clientesFiltrados}
           keyExtractor={(item) => String(item.id)}
-          style={styles.list}
+          style={[
+            styles.list,
+            {
+              backgroundColor: colors.surface,
+              borderTopColor: colors.border,
+            },
+          ]}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
@@ -160,16 +187,18 @@ export default function ClientesListScreen(): React.ReactElement {
               tintColor={colors.textSecondary}
             />
           }
-          renderItem={({ item }) => (
-            <ClienteItem
-              cliente={item}
-              onPress={() =>
-                navigation.navigate(
-                  'ClienteEstadoCuenta' as never,
-                  { clienteId: item.id } as never,
-                )
-              }
-            />
+          renderItem={({ item, index }) => (
+            <FadeInItem delay={Math.min(index * 20, 240)}>
+              <ClienteItem
+                cliente={item}
+                onPress={() =>
+                  navigation.navigate(
+                    'ClienteEstadoCuenta' as never,
+                    { clienteId: item.id } as never,
+                  )
+                }
+              />
+            </FadeInItem>
           )}
         />
       )}
@@ -184,14 +213,12 @@ export default function ClientesListScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
+  safe: { flex: 1 },
   searchWrapper: { paddingHorizontal: spacing.lg, marginBottom: spacing.sm },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     height: 40,
@@ -199,7 +226,6 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     ...typography.body,
-    color: colors.textPrimary,
     marginLeft: spacing.sm,
     paddingVertical: 0,
   },
@@ -210,26 +236,14 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     gap: spacing.sm,
   },
-  toggleText: { ...typography.caption, color: colors.textMuted },
+  toggleText: { ...typography.caption },
   toggleTextActive: {
-    color: colors.textPrimary,
     fontFamily: typography.button.fontFamily,
   },
   list: {
     flex: 1,
-    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
   },
   listContent: { paddingBottom: 100 },
-  listWrapper: { paddingHorizontal: spacing.lg },
-  skelItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
   fab: { position: 'absolute', right: spacing.lg, bottom: spacing.lg },
 });

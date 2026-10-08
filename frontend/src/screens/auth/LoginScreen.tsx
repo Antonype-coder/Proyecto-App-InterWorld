@@ -14,7 +14,8 @@ import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as Haptics from 'expo-haptics';
 
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 import { loginSchema, type LoginFormData } from '@utils/validators';
 import { useAuthStore } from '@store/authStore';
 import Input from '@components/ui/Input';
@@ -23,6 +24,7 @@ import Toast from '@components/ui/Toast';
 import type { ToastVariant } from '@tipos/index';
 
 export default function LoginScreen(): React.ReactElement {
+  const colors = useColors();
   const login = useAuthStore((s) => s.login);
   const loading = useAuthStore((s) => s.loading);
 
@@ -45,7 +47,9 @@ export default function LoginScreen(): React.ReactElement {
   const onSubmit = async (data: LoginFormData): Promise<void> => {
     try {
       await login(data.email.trim(), data.password);
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      );
     } catch (e) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const msg = e instanceof Error ? e.message : 'Error al iniciar sesión';
@@ -64,7 +68,10 @@ export default function LoginScreen(): React.ReactElement {
   };
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+      edges={['top', 'bottom']}
+    >
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -74,23 +81,39 @@ export default function LoginScreen(): React.ReactElement {
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
         >
-          {/* Marca */}
           <View style={styles.brandSection}>
-            <View style={styles.logo}>
+            <View
+              style={[
+                styles.logo,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
               <MaterialCommunityIcons
                 name="storefront-outline"
                 size={32}
                 color={colors.textPrimary}
               />
             </View>
-            <Text style={styles.brandName}>InterWorld</Text>
-            <Text style={styles.brandTagline}>Tu tienda, bajo control.</Text>
+            <Text style={[styles.brandName, { color: colors.textPrimary }]}>
+              InterWorld
+            </Text>
+            <Text
+              style={[styles.brandTagline, { color: colors.textSecondary }]}
+            >
+              Tu tienda, bajo control.
+            </Text>
           </View>
 
-          {/* Formulario */}
           <View style={styles.formSection}>
-            <Text style={styles.formTitle}>Iniciar sesión</Text>
-            <Text style={styles.formSubtitle}>
+            <Text style={[styles.formTitle, { color: colors.textPrimary }]}>
+              Iniciar sesión
+            </Text>
+            <Text
+              style={[styles.formSubtitle, { color: colors.textSecondary }]}
+            >
               Ingresa tus credenciales para continuar
             </Text>
 
@@ -146,12 +169,25 @@ export default function LoginScreen(): React.ReactElement {
               />
             </View>
 
-            {/* Cuentas demo */}
             <View style={styles.demoSection}>
               <View style={styles.demoHeader}>
-                <View style={styles.demoLine} />
-                <Text style={styles.demoLabel}>CUENTAS DE PRUEBA</Text>
-                <View style={styles.demoLine} />
+                <View
+                  style={[
+                    styles.demoLine,
+                    { backgroundColor: colors.border },
+                  ]}
+                />
+                <Text
+                  style={[styles.demoLabel, { color: colors.textMuted }]}
+                >
+                  CUENTAS DE PRUEBA
+                </Text>
+                <View
+                  style={[
+                    styles.demoLine,
+                    { backgroundColor: colors.border },
+                  ]}
+                />
               </View>
 
               <View style={styles.demoRow}>
@@ -169,8 +205,9 @@ export default function LoginScreen(): React.ReactElement {
             </View>
           </View>
 
-          {/* Footer */}
-          <Text style={styles.footer}>v2.0.0</Text>
+          <Text style={[styles.footer, { color: colors.textMuted }]}>
+            v2.0.0
+          </Text>
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -189,12 +226,18 @@ function DemoButton(props: {
   label: string;
   onPress: () => void;
 }): React.ReactElement {
+  const colors = useColors();
+
   return (
     <Pressable
       onPress={props.onPress}
       style={({ pressed }) => [
         styles.demoButton,
-        pressed ? styles.demoButtonPressed : null,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+        },
+        pressed ? { backgroundColor: colors.surfacePressed } : null,
       ]}
     >
       <MaterialCommunityIcons
@@ -202,13 +245,15 @@ function DemoButton(props: {
         size={16}
         color={colors.textSecondary}
       />
-      <Text style={styles.demoButtonText}>{props.label}</Text>
+      <Text style={[styles.demoButtonText, { color: colors.textPrimary }]}>
+        {props.label}
+      </Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
+  safe: { flex: 1 },
   flex: { flex: 1 },
   scroll: {
     flexGrow: 1,
@@ -217,7 +262,6 @@ const styles = StyleSheet.create({
     minHeight: '100%',
   },
 
-  // Marca
   brandSection: {
     alignItems: 'center',
     marginBottom: spacing.giant,
@@ -226,38 +270,26 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: radius.xl,
-    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.lg,
   },
-  brandName: {
-    ...typography.h1,
-    color: colors.textPrimary,
-  },
+  brandName: { ...typography.h1 },
   brandTagline: {
     ...typography.caption,
-    color: colors.textSecondary,
     marginTop: spacing.xs,
   },
 
-  // Formulario
   formSection: { marginBottom: spacing.xxl },
-  formTitle: {
-    ...typography.h2,
-    color: colors.textPrimary,
-  },
+  formTitle: { ...typography.h2 },
   formSubtitle: {
     ...typography.caption,
-    color: colors.textSecondary,
     marginTop: spacing.xs,
     marginBottom: spacing.xxl,
   },
   form: { marginBottom: spacing.xl },
 
-  // Demo
   demoSection: { marginTop: spacing.lg },
   demoHeader: {
     flexDirection: 'row',
@@ -267,11 +299,9 @@ const styles = StyleSheet.create({
   demoLine: {
     flex: 1,
     height: 1,
-    backgroundColor: colors.border,
   },
   demoLabel: {
     ...typography.overline,
-    color: colors.textMuted,
     marginHorizontal: spacing.md,
   },
   demoRow: {
@@ -285,21 +315,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingVertical: spacing.md,
     borderRadius: radius.md,
-    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
     gap: spacing.sm,
   },
-  demoButtonPressed: { backgroundColor: colors.surfacePressed },
   demoButtonText: {
     ...typography.buttonSmall,
-    color: colors.textPrimary,
   },
 
-  // Footer
   footer: {
     ...typography.small,
-    color: colors.textMuted,
     textAlign: 'center',
     marginTop: spacing.xxl,
   },

@@ -1,45 +1,146 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, ViewStyle } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, typography } from '@theme/index';
 import type { NivelLealtad } from '@tipos/index';
 
-interface Props {
+interface LealtadBadgeProps {
   nivel: NivelLealtad;
+  puntos?: number;
   size?: 'sm' | 'md';
+  style?: ViewStyle;
 }
 
-const NIVEL_CONFIG: Record<NivelLealtad, {
+interface NivelConfig {
   label: string;
-  bg: string;
-  text: string;
   icon: keyof typeof MaterialCommunityIcons.glyphMap;
-}> = {
-  bronze: { label: 'Bronze', bg: '#FED7AA', text: '#9A3412', icon: 'medal-outline' },
-  silver: { label: 'Silver', bg: '#E5E7EB', text: '#4B5563', icon: 'medal' },
-  gold:   { label: 'Gold',   bg: '#FEF3C7', text: '#92400E', icon: 'crown' },
+  color: string;
+  bg: string;
+}
+
+/**
+ * Mapa de niveles. Si tu backend agrega un nivel nuevo, cae al fallback
+ * sin romper el type-check.
+ */
+const NIVEL_MAP: Record<string, NivelConfig> = {
+  platino: {
+    label: 'Platino',
+    icon: 'diamond-stone',
+    color: '#E5E4E2',
+    bg: '#2F2F2F',
+  },
+  platinum: {
+    label: 'Platino',
+    icon: 'diamond-stone',
+    color: '#E5E4E2',
+    bg: '#2F2F2F',
+  },
+  oro: {
+    label: 'Oro',
+    icon: 'crown-outline',
+    color: '#B45309',
+    bg: '#FEF3C7',
+  },
+  gold: {
+    label: 'Oro',
+    icon: 'crown-outline',
+    color: '#B45309',
+    bg: '#FEF3C7',
+  },
+  plata: {
+    label: 'Plata',
+    icon: 'medal-outline',
+    color: '#475569',
+    bg: '#F1F5F9',
+  },
+  silver: {
+    label: 'Plata',
+    icon: 'medal-outline',
+    color: '#475569',
+    bg: '#F1F5F9',
+  },
+  bronce: {
+    label: 'Bronce',
+    icon: 'medal',
+    color: '#7C2D12',
+    bg: '#FEF3C7',
+  },
+  bronze: {
+    label: 'Bronce',
+    icon: 'medal',
+    color: '#7C2D12',
+    bg: '#FEF3C7',
+  },
 };
 
-export default function LealtadBadge({ nivel, size = 'md' }: Props): React.ReactElement {
-  const cfg = NIVEL_CONFIG[nivel];
+const FALLBACK: NivelConfig = {
+  label: 'Cliente',
+  icon: 'account-outline',
+  color: '#475569',
+  bg: '#F1F5F9',
+};
+
+export default function LealtadBadge({
+  nivel,
+  puntos,
+  size = 'md',
+  style,
+}: LealtadBadgeProps): React.ReactElement {
   const isSmall = size === 'sm';
+  const config = NIVEL_MAP[String(nivel)] ?? FALLBACK;
 
   return (
     <View
       style={[
         styles.base,
-        { backgroundColor: cfg.bg, paddingVertical: isSmall ? 2 : 3, paddingHorizontal: isSmall ? 6 : 8 },
+        {
+          backgroundColor: config.bg,
+          paddingVertical: isSmall ? 3 : 5,
+          paddingHorizontal: isSmall ? 8 : 10,
+          gap: isSmall ? 4 : 6,
+        },
+        style,
       ]}
     >
-      <MaterialCommunityIcons name={cfg.icon} size={isSmall ? 10 : 12} color={cfg.text} style={{ marginRight: 3 }} />
-      <Text style={[styles.label, { color: cfg.text, fontSize: isSmall ? 10 : 11 }]}>
-        {cfg.label.toUpperCase()}
+      <MaterialCommunityIcons
+        name={config.icon}
+        size={isSmall ? 12 : 14}
+        color={config.color}
+      />
+      <Text
+        style={[
+          styles.label,
+          { color: config.color, fontSize: isSmall ? 10 : 12 },
+        ]}
+      >
+        {config.label.toUpperCase()}
       </Text>
+      {puntos !== undefined ? (
+        <Text
+          style={[
+            styles.puntos,
+            { color: config.color, fontSize: isSmall ? 10 : 12 },
+          ]}
+        >
+          · {puntos}
+        </Text>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  base: { flexDirection: 'row', alignItems: 'center', borderRadius: radius.xs, alignSelf: 'flex-start' },
-  label: { fontFamily: typography.button.fontFamily, letterSpacing: 0.4 },
+  base: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radius.pill,
+    alignSelf: 'flex-start',
+  },
+  label: {
+    fontFamily: typography.button.fontFamily,
+    letterSpacing: 0.4,
+  },
+  puntos: {
+    fontFamily: typography.button.fontFamily,
+  },
 });

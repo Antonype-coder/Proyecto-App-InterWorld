@@ -1,7 +1,7 @@
 import { ViewStyle, Platform } from 'react-native';
 import { colors } from './colors';
 
-export const shadows = {
+const buildShadows = (shadowOpacity: number, elevationBase: number) => ({
   none: {
     shadowColor: 'transparent',
     shadowOffset: { width: 0, height: 0 },
@@ -14,10 +14,10 @@ export const shadows = {
     ios: {
       shadowColor: colors.shadowColor,
       shadowOffset: { width: 0, height: 1 },
-      shadowOpacity: 0.04,
+      shadowOpacity: shadowOpacity * 0.04,
       shadowRadius: 2,
     },
-    android: { elevation: 1 },
+    android: { elevation: elevationBase },
     default: {},
   }) as ViewStyle,
 
@@ -25,10 +25,10 @@ export const shadows = {
     ios: {
       shadowColor: colors.shadowColor,
       shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.06,
+      shadowOpacity: shadowOpacity * 0.06,
       shadowRadius: 4,
     },
-    android: { elevation: 2 },
+    android: { elevation: elevationBase + 1 },
     default: {},
   }) as ViewStyle,
 
@@ -36,10 +36,10 @@ export const shadows = {
     ios: {
       shadowColor: colors.shadowColor,
       shadowOffset: { width: 0, height: 4 },
-      shadowOpacity: 0.08,
+      shadowOpacity: shadowOpacity * 0.08,
       shadowRadius: 8,
     },
-    android: { elevation: 4 },
+    android: { elevation: elevationBase + 3 },
     default: {},
   }) as ViewStyle,
 
@@ -47,10 +47,10 @@ export const shadows = {
     ios: {
       shadowColor: colors.shadowColor,
       shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.10,
+      shadowOpacity: shadowOpacity * 0.1,
       shadowRadius: 16,
     },
-    android: { elevation: 8 },
+    android: { elevation: elevationBase + 7 },
     default: {},
   }) as ViewStyle,
 
@@ -58,12 +58,20 @@ export const shadows = {
     ios: {
       shadowColor: colors.shadowColor,
       shadowOffset: { width: 0, height: 16 },
-      shadowOpacity: 0.14,
+      shadowOpacity: shadowOpacity * 0.14,
       shadowRadius: 32,
     },
-    android: { elevation: 16 },
+    android: { elevation: elevationBase + 15 },
     default: {},
   }) as ViewStyle,
-} as const;
+});
+
+export const shadows = buildShadows(1, 1);
+
+/**
+ * En dark, las sombras se reducen porque la jerarquía la da el color
+ * de superficie, no la profundidad.
+ */
+export const darkShadows = buildShadows(0.6, 0);
 
 export type AppShadows = typeof shadows;

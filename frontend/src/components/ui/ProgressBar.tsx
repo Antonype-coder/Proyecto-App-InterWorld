@@ -3,43 +3,56 @@ import { View, StyleSheet, ViewStyle } from 'react-native';
 import { colors } from '@theme/index';
 
 interface ProgressBarProps {
-  progress: number; // 0 a 100
+  /** Alias moderno */
+  value?: number;
+  /** Alias compatible con uso previo */
+  progress?: number;
+  max?: number;
   height?: number;
   color?: string;
-  bgColor?: string;
+  trackColor?: string;
   style?: ViewStyle;
 }
 
 export default function ProgressBar({
+  value,
   progress,
+  max = 100,
   height = 6,
-  color,
-  bgColor = colors.bgSubtle,
+  color = colors.primary,
+  trackColor = colors.bgSubtle,
   style,
 }: ProgressBarProps): React.ReactElement {
-  const clamped = Math.min(100, Math.max(0, progress));
-  const fillColor = color ?? colors.primary;
+  const raw = value ?? progress ?? 0;
+  const safeMax = max > 0 ? max : 1;
+  const pct = Math.max(0, Math.min(100, (raw / safeMax) * 100));
 
   return (
     <View
       style={[
-        styles.base,
-        { height, borderRadius: height / 2, backgroundColor: bgColor },
+        styles.track,
+        { height, borderRadius: height / 2, backgroundColor: trackColor },
         style,
       ]}
+      accessibilityRole="progressbar"
+      accessibilityValue={{ min: 0, max: safeMax, now: raw }}
     >
       <View
-        style={{
-          width: `${clamped}%`,
-          height: '100%',
-          borderRadius: height / 2,
-          backgroundColor: fillColor,
-        }}
+        style={[
+          styles.fill,
+          {
+            width: `${pct}%`,
+            height,
+            borderRadius: height / 2,
+            backgroundColor: color,
+          },
+        ]}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  base: { overflow: 'hidden' },
+  track: { width: '100%', overflow: 'hidden' },
+  fill: { width: 0 },
 });

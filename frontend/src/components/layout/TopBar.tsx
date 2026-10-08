@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, spacing, typography } from '@theme/index';
+import { spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 import BusinessLogo from '@components/domain/BusinessLogo';
 
 interface TopBarProps {
@@ -21,22 +22,25 @@ export default function TopBar({
   onRightPress,
   rightLabel,
 }: TopBarProps): React.ReactElement {
+  const colors = useColors();
+
   return (
-    <View style={styles.container}>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.surface,
+          borderBottomColor: colors.border,
+        },
+      ]}
+    >
       {onBack ? (
-        <Pressable
+        <AnimatedIconButton
+          icon="arrow-left"
           onPress={onBack}
-          hitSlop={10}
-          style={styles.iconBtn}
-          accessibilityRole="button"
           accessibilityLabel="Volver"
-        >
-          <MaterialCommunityIcons
-            name="arrow-left"
-            size={20}
-            color={colors.textPrimary}
-          />
-        </Pressable>
+          color={colors.textPrimary}
+        />
       ) : (
         <View style={styles.iconBtn} />
       )}
@@ -44,39 +48,89 @@ export default function TopBar({
       <View style={styles.info}>
         <View style={styles.titleRow}>
           <BusinessLogo size={24} />
-          <Text style={styles.title} numberOfLines={1}>
+          <Text
+            style={[styles.title, { color: colors.textPrimary }]}
+            numberOfLines={1}
+          >
             {title}
           </Text>
         </View>
         {subtitle ? (
-          <Text style={styles.subtitle} numberOfLines={1}>
+          <Text
+            style={[styles.subtitle, { color: colors.textMuted }]}
+            numberOfLines={1}
+          >
             {subtitle}
           </Text>
         ) : null}
       </View>
 
       {rightIcon && onRightPress ? (
-        <Pressable
+        <AnimatedIconButton
+          icon={rightIcon}
           onPress={onRightPress}
-          hitSlop={10}
-          style={styles.iconBtn}
-          accessibilityRole="button"
           accessibilityLabel={rightLabel ?? 'Acción'}
-        >
-          {rightLabel ? (
-            <Text style={styles.rightLabel}>{rightLabel}</Text>
-          ) : (
-            <MaterialCommunityIcons
-              name={rightIcon}
-              size={20}
-              color={colors.textPrimary}
-            />
-          )}
-        </Pressable>
+          color={colors.textPrimary}
+          label={rightLabel}
+        />
       ) : (
         <View style={styles.iconBtn} />
       )}
     </View>
+  );
+}
+
+function AnimatedIconButton({
+  icon,
+  onPress,
+  accessibilityLabel,
+  color,
+  label,
+}: {
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  onPress: () => void;
+  accessibilityLabel: string;
+  color: string;
+  label?: string;
+}): React.ReactElement {
+  const scale = React.useRef(new Animated.Value(1)).current;
+
+  const onPressIn = () => {
+    Animated.spring(scale, {
+      toValue: 0.88,
+      useNativeDriver: true,
+      damping: 15,
+      stiffness: 400,
+    }).start();
+  };
+
+  const onPressOut = () => {
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+      damping: 15,
+      stiffness: 400,
+    }).start();
+  };
+
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        hitSlop={10}
+        style={styles.iconBtn}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+      >
+        {label ? (
+          <Text style={[styles.rightLabel, { color }]}>{label}</Text>
+        ) : (
+          <MaterialCommunityIcons name={icon} size={20} color={color} />
+        )}
+      </Pressable>
+    </Animated.View>
   );
 }
 
@@ -87,9 +141,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    backgroundColor: colors.surface,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
   iconBtn: {
     minWidth: 40,
@@ -99,11 +151,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   info: { flex: 1, alignItems: 'center', minWidth: 0 },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, maxWidth: '100%' },
-  title: { ...typography.h3, color: colors.textPrimary },
-  subtitle: { ...typography.small, color: colors.textMuted, marginTop: 2 },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    maxWidth: '100%',
+  },
+  title: { ...typography.h3 },
+  subtitle: { ...typography.small, marginTop: 2 },
   rightLabel: {
     ...typography.buttonSmall,
-    color: colors.textPrimary,
   },
 });

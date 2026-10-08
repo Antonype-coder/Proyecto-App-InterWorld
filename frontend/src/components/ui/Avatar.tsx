@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, ViewStyle } from 'react-native';
-import { colors, typography } from '@theme/index';
+import { typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 import { getInitials } from '@utils/format';
 
 interface AvatarProps {
@@ -23,11 +24,13 @@ export default function Avatar({
   nombre,
   size = 'md',
   bgColor,
-  textColor = colors.textInverse,
+  textColor,
   style,
 }: AvatarProps): React.ReactElement {
+  const colors = useColors();
   const dim = SIZES[size];
   const bg = bgColor ?? getColorFromName(nombre);
+  const fg = textColor ?? '#FFFFFF';
 
   return (
     <View
@@ -43,7 +46,10 @@ export default function Avatar({
       ]}
     >
       <Text
-        style={[styles.label, { color: textColor, fontSize: dim.font }]}
+        style={[
+          styles.label,
+          { color: fg, fontSize: dim.font },
+        ]}
         numberOfLines={1}
       >
         {getInitials(nombre)}

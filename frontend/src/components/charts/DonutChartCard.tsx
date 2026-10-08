@@ -1,13 +1,10 @@
-// src/components/charts/DonutChartCard.tsx
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { PieChart } from 'react-native-gifted-charts';
+import { radius, spacing, typography, shadows } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 
-import { colors, spacing, typography } from '@theme/index';
-import Card from '@components/ui/Card';
-import { formatCurrency } from '@utils/format';
-
-interface Slice {
+interface DonutDataPoint {
   label: string;
   value: number;
   color: string;
@@ -16,96 +13,152 @@ interface Slice {
 interface DonutChartCardProps {
   title: string;
   subtitle?: string;
-  data: Slice[];
+  data: DonutDataPoint[];
+  centerColor?: string;
 }
 
 export default function DonutChartCard({
   title,
   subtitle,
   data,
+  centerColor,
 }: DonutChartCardProps): React.ReactElement {
-  const total = data.reduce((sum, d) => sum + d.value, 0);
+  const colors = useColors();
 
-  const pieData = data.map((d) => ({
-    value: d.value,
-    color: d.color,
-    text: total > 0 ? `${Math.round((d.value / total) * 100)}%` : '0%',
+  const pieData = data.map((point) => ({
+    value: point.value,
+    color: point.color,
+    text: '',
   }));
 
-  if (total === 0) {
-    return (
-      <Card variant="default" style={styles.card}>
-        <Text style={styles.title}>{title}</Text>
-        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-        <View style={styles.empty}>
-          <Text style={styles.emptyText}>Sin ventas en este período</Text>
-        </View>
-      </Card>
-    );
-  }
+  const total = data.reduce((sum, item) => sum + item.value, 0);
+  const centerTint = centerColor ?? colors.textPrimary;
 
   return (
-    <Card variant="default" style={styles.card}>
-      <Text style={styles.title}>{title}</Text>
-      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-
-      <View style={styles.chartWrap}>
-        <PieChart
-          data={pieData}
-          donut
-          radius={80}
-          innerRadius={55}
-          innerCircleColor={colors.surface}
-          centerLabelComponent={() => (
-            <View style={styles.center}>
-              <Text style={styles.centerValue}>{formatCurrency(total)}</Text>
-              <Text style={styles.centerLabel}>Total</Text>
-            </View>
-          )}
-        />
+    <View
+      style={[
+        styles.card,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+        },
+        shadows.xs,
+      ]}
+    >
+      <View style={styles.header}>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text style={[styles.subtitle, { color: colors.textMuted }]}>
+            {subtitle}
+          </Text>
+        ) : null}
       </View>
 
-      <View style={styles.legend}>
-        {data.map((d, idx) => (
-          <View key={idx} style={styles.legendRow}>
-            <View style={[styles.legendDot, { backgroundColor: d.color }]} />
-            <Text style={styles.legendLabel}>{d.label}</Text>
-            <Text style={styles.legendValue}>{formatCurrency(d.value)}</Text>
+      {data.length === 0 || total === 0 ? (
+        <Text style={[styles.empty, { color: colors.textMuted }]}>
+          Sin datos disponibles
+        </Text>
+      ) : (
+        <View style={styles.body}>
+          <View style={styles.chartWrapper}>
+            <PieChart
+              data={pieData}
+              donut
+              radius={72}
+              innerRadius={48}
+              innerCircleColor={colors.surface}
+              centerLabelComponent={() => (
+                <View style={styles.centerLabel}>
+                  <Text
+                    style={[
+                      styles.centerValue,
+                      { color: centerTint },
+                    ]}
+                  >
+                    {total >= 1000
+                      ? `${(total / 1000).toFixed(1)}k`
+                      : String(Math.round(total))}
+                  </Text>
+                  <Text
+                    style={[styles.centerSub, { color: colors.textMuted }]}
+                  >
+                    Total
+                  </Text>
+                </View>
+              )}
+            />
           </View>
-        ))}
-      </View>
-    </Card>
+
+          <View style={styles.legend}>
+            {data.map((point, idx) => {
+              const pct = total > 0 ? (point.value / total) * 100 : 0;
+              return (
+                <View key={idx} style={styles.legendRow}>
+                  <View
+                    style={[
+                      styles.legendDot,
+                      { backgroundColor: point.color },
+                    ]}
+                  />
+                  <View style={styles.legendContent}>
+                    <Text
+                      style={[
+                        styles.legendLabel,
+                        { color: colors.textPrimary },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {point.label}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.legendPct,
+                        { color: colors.textMuted },
+                      ]}
+                    >
+                      {pct.toFixed(1)}%
+                    </Text>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        </View>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { marginBottom: spacing.md },
-  title: { ...typography.h3, color: colors.textPrimary },
+  card: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    padding: spacing.lg,
+  },
+  header: { marginBottom: spacing.lg },
+  title: { ...typography.h3 },
   subtitle: {
     ...typography.small,
-    color: colors.textMuted,
     marginTop: 2,
-    marginBottom: spacing.md,
   },
-  chartWrap: {
+  body: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: spacing.md,
+    gap: spacing.lg,
   },
-  center: { alignItems: 'center' },
-  centerValue: {
-    ...typography.bodyBold,
-    color: colors.textPrimary,
-    fontSize: 15,
+  chartWrapper: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   centerLabel: {
-    ...typography.tiny,
-    color: colors.textMuted,
-    marginTop: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  legend: {
-    marginTop: spacing.md,
-    gap: spacing.sm,
-  },
+  centerValue: { ...typography.h3 },
+  centerSub: { ...typography.small, marginTop: 2 },
+  legend: { flex: 1, gap: spacing.sm },
   legendRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -116,22 +169,12 @@ const styles = StyleSheet.create({
     height: 10,
     borderRadius: 5,
   },
-  legendLabel: {
-    ...typography.body,
-    color: colors.textSecondary,
-    flex: 1,
-  },
-  legendValue: {
-    ...typography.bodyBold,
-    color: colors.textPrimary,
-  },
+  legendContent: { flex: 1, minWidth: 0 },
+  legendLabel: { ...typography.small },
+  legendPct: { ...typography.tiny, marginTop: 1 },
   empty: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.xxl,
-    backgroundColor: colors.bgSubtle,
-    borderRadius: 8,
-    marginTop: spacing.md,
+    ...typography.caption,
+    textAlign: 'center',
+    paddingVertical: spacing.xxl,
   },
-  emptyText: { ...typography.caption, color: colors.textMuted },
 });

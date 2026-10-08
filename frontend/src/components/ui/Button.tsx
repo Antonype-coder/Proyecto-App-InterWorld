@@ -7,9 +7,13 @@ import {
   ViewStyle,
   TextStyle,
   ActivityIndicator,
+  Animated,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
+import { usePressAnimation } from '@hooks/usePressAnimation';
+import type { AppColors } from '@theme/index';
 import type { ButtonVariant, ButtonSize } from '@tipos/index';
 
 interface ButtonProps {
@@ -26,6 +30,8 @@ interface ButtonProps {
   accessibilityLabel?: string;
 }
 
+const DANGER_TEXT = '#FFFFFF';
+
 export default function Button({
   label,
   onPress,
@@ -39,23 +45,28 @@ export default function Button({
   style,
   accessibilityLabel,
 }: ButtonProps): React.ReactElement {
+  const colors = useColors();
   const isDisabled = disabled || loading;
-  const config = getVariantConfig(variant, size);
+  const config = getVariantConfig(variant, size, colors);
+  const press = usePressAnimation({ enable: !isDisabled });
 
   return (
-    <View style={[fullWidth ? styles.fullWidth : null, style]}>
+    <Animated.View
+      style={[
+        fullWidth ? styles.fullWidth : null,
+        style,
+        press.style,
+      ]}
+    >
       <Pressable
         onPress={isDisabled ? undefined : onPress}
+        onPressIn={press.onPressIn}
+        onPressOut={press.onPressOut}
         disabled={isDisabled}
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel ?? label}
         accessibilityState={{ disabled: isDisabled, busy: loading }}
-        style={({ pressed }) => [
-          styles.base,
-          config.container,
-          isDisabled ? styles.disabled : null,
-          pressed && !isDisabled ? styles.pressed : null,
-        ]}
+        style={[styles.base, config.container, isDisabled ? styles.disabled : null]}
       >
         {loading ? (
           <ActivityIndicator size="small" color={config.text.color as string} />
@@ -85,11 +96,15 @@ export default function Button({
           </View>
         )}
       </Pressable>
-    </View>
+    </Animated.View>
   );
 }
 
-function getVariantConfig(variant: ButtonVariant, size: ButtonSize) {
+function getVariantConfig(
+  variant: ButtonVariant,
+  size: ButtonSize,
+  colors: AppColors,
+) {
   const heights = { sm: 32, md: 40, lg: 48 };
   const paddingsH = { sm: 12, md: 16, lg: 20 };
   const fontSize = size === 'sm' ? 13 : size === 'lg' ? 15 : 14;
@@ -113,7 +128,7 @@ function getVariantConfig(variant: ButtonVariant, size: ButtonSize) {
     case 'accent':
       return {
         container: { ...base, backgroundColor: colors.accent },
-        text: { color: colors.textInverse, fontSize } as TextStyle,
+        text: { color: DANGER_TEXT, fontSize } as TextStyle,
         iconSize,
       };
     case 'outline':
@@ -130,7 +145,7 @@ function getVariantConfig(variant: ButtonVariant, size: ButtonSize) {
     case 'danger':
       return {
         container: { ...base, backgroundColor: colors.danger },
-        text: { color: colors.textInverse, fontSize } as TextStyle,
+        text: { color: DANGER_TEXT, fontSize } as TextStyle,
         iconSize,
       };
     case 'ghost':
@@ -146,10 +161,13 @@ function getVariantConfig(variant: ButtonVariant, size: ButtonSize) {
 const styles = StyleSheet.create({
   base: { flexDirection: 'row' },
   fullWidth: { width: '100%' },
-  content: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   label: { ...typography.button },
   iconLeft: { marginRight: spacing.sm },
   iconRight: { marginLeft: spacing.sm },
   disabled: { opacity: 0.4 },
-  pressed: { opacity: 0.8 },
 });

@@ -1,45 +1,58 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 
 interface AlertaStockProps {
   cantidad: number;
-  onPress?: () => void;
+  onPress: () => void;
 }
 
 export default function AlertaStock({
   cantidad,
   onPress,
 }: AlertaStockProps): React.ReactElement {
-  const text =
-    cantidad === 1
-      ? '1 producto con stock bajo'
-      : `${cantidad} productos con stock bajo`;
+  const colors = useColors();
 
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.container, pressed ? styles.pressed : null]}
+      style={({ pressed }) => [
+        styles.container,
+        {
+          backgroundColor: colors.chartWineSubtle,
+          borderColor: colors.chartWine,
+        },
+        pressed ? { opacity: 0.92 } : null,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={`${cantidad} productos con stock bajo`}
     >
-      <View style={styles.iconWrap}>
+      <View
+        style={[styles.iconWrap, { backgroundColor: colors.surface }]}
+      >
         <MaterialCommunityIcons
           name="alert-outline"
-          size={18}
-          color={colors.warningText}
+          size={20}
+          color={colors.chartWine}
         />
       </View>
-      <View style={styles.content}>
-        <Text style={styles.title}>Stock bajo</Text>
-        <Text style={styles.text}>{text}</Text>
+
+      <View style={styles.info}>
+        <Text style={[styles.title, { color: colors.chartWine }]}>
+          {cantidad} {cantidad === 1 ? 'producto' : 'productos'} con stock bajo
+        </Text>
+        <Text style={[styles.sub, { color: colors.chartWine, opacity: 0.75 }]}>
+          Revisa el inventario para reponer
+        </Text>
       </View>
-      {onPress ? (
-        <MaterialCommunityIcons
-          name="chevron-right"
-          size={18}
-          color={colors.textMuted}
-        />
-      ) : null}
+
+      <MaterialCommunityIcons
+        name="chevron-right"
+        size={20}
+        color={colors.chartWine}
+      />
     </Pressable>
   );
 }
@@ -48,23 +61,19 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.warningSubtle,
-    borderWidth: 1,
-    borderColor: colors.warning,
-    borderRadius: radius.lg,
     padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    gap: spacing.md,
   },
-  pressed: { opacity: 0.8 },
   iconWrap: {
-    width: 32,
-    height: 32,
+    width: 40,
+    height: 40,
     borderRadius: radius.md,
-    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: spacing.md,
   },
-  content: { flex: 1 },
-  title: { ...typography.bodyBold, color: colors.warningText },
-  text: { ...typography.small, color: colors.warningText, marginTop: 2 },
+  info: { flex: 1, minWidth: 0 },
+  title: { ...typography.bodyBold },
+  sub: { ...typography.small, marginTop: 2 },
 });

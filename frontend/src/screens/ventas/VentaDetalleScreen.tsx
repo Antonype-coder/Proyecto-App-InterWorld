@@ -1,11 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-} from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
@@ -16,7 +10,10 @@ import {
 } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
+import { useConfirm } from '@components/feedback/ConfirmProvider';
+import { useUIStore } from '@store/uiStore';
 import { ventasApi } from '@api/index';
 import { useAuthStore } from '@store/authStore';
 import type { Venta, VentasStackParamList } from '@tipos/index';
@@ -25,11 +22,9 @@ import Badge from '@components/ui/Badge';
 import Button from '@components/ui/Button';
 import Card from '@components/ui/Card';
 import Loader from '@components/ui/Loader';
-import EmptyState from '@components/ui/EmptyState';
+import ErrorState from '@components/feedback/ErrorState';
 import Modal from '@components/ui/Modal';
 import Input from '@components/ui/Input';
-import Toast from '@components/ui/Toast';
-import type { ToastVariant } from '@tipos/index';
 import TopBar from '@components/layout/TopBar';
 
 type Params = RouteProp<VentasStackParamList, 'VentaDetalle'>;
@@ -38,6 +33,9 @@ export default function VentaDetalleScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
   const route = useRoute<Params>();
   const ventaId = route.params.ventaId;
+  const colors = useColors();
+  const confirm = useConfirm();
+  const showToast = useUIStore((s) => s.showToast);
 
   const user = useAuthStore((s) => s.user);
   const esAdmin = user?.rol === 'admin';
@@ -45,16 +43,9 @@ export default function VentaDetalleScreen(): React.ReactElement {
   const [venta, setVenta] = useState<Venta | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
   const [modalAnular, setModalAnular] = useState(false);
   const [motivo, setMotivo] = useState('');
   const [anulando, setAnulando] = useState(false);
-
-  const [toast, setToast] = useState<{
-    visible: boolean;
-    message: string;
-    variant: ToastVariant;
-  }>({ visible: false, message: '', variant: 'info' });
 
   const cargar = useCallback(async (): Promise<void> => {
     setLoading(true);
@@ -77,11 +68,7 @@ export default function VentaDetalleScreen(): React.ReactElement {
 
   const anular = async (): Promise<void> => {
     if (motivo.trim().length < 3) {
-      setToast({
-        visible: true,
-        message: 'El motivo es obligatorio',
-        variant: 'error',
-      });
+      showToast('El motivo es obligatorio', 'error');
       return;
     }
     setAnulando(true);
@@ -93,24 +80,34 @@ export default function VentaDetalleScreen(): React.ReactElement {
       setModalAnular(false);
       setMotivo('');
       await cargar();
-      setToast({
-        visible: true,
-        message: 'Venta anulada',
-        variant: 'success',
-      });
+      showToast('Venta anulada.', 'success');
     } catch (e) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const msg = e instanceof Error ? e.message : 'Error al anular';
-      setToast({ visible: true, message: msg, variant: 'error' });
+      showToast(msg, 'error');
     } finally {
       setAnulando(false);
     }
   };
 
+  const confirmarAnular = async (): Promise<void> => {
+    const ok = await confirm({
+      title: 'Anular venta',
+      message:
+        'Esta acción repondrá el stock y, si fue a crédito, revertirá la deuda del cliente. No se puede deshacer.',
+      confirmLabel: 'Continuar',
+      variant: 'danger',
+    });
+    if (ok) setModalAnular(true);
+  };
+
   if (loading) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top']}>
-        <Topbar onBack={() => navigation.goBack()} />
+      <SafeAreaView
+        style={[styles.safe, { backgroundColor: colors.bg }]}
+        edges={['top']}
+      >
+        <TopBar title="Detalle de venta" onBack={() => navigation.goBack()} />
         <Loader message="Cargando venta" />
       </SafeAreaView>
     );
@@ -118,14 +115,16 @@ export default function VentaDetalleScreen(): React.ReactElement {
 
   if (error || !venta) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top']}>
-        <Topbar onBack={() => navigation.goBack()} />
-        <EmptyState
-          icon="alert-circle-outline"
-          title="No se pudo cargar"
-          description={error ?? 'Venta no encontrada'}
-          actionLabel="Reintentar"
-          onAction={cargar}
+      <SafeAreaView
+        style={[styles.safe, { backgroundColor: colors.bg }]}
+        edges={['top']}
+      >
+        <TopBar title="Detalle de venta" onBack={() => navigation.goBack()} />
+        <ErrorState
+          title="No pudimos cargar la venta"
+          message="Revisa tu conexión e intenta de nuevo."
+          technicalMessage={error ?? undefined}
+          onRetry={cargar}
         />
       </SafeAreaView>
     );
@@ -135,23 +134,36 @@ export default function VentaDetalleScreen(): React.ReactElement {
   const tieneDescuento = parseFloat(venta.descuento) > 0;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <Topbar onBack={() => navigation.goBack()} />
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+      edges={['top']}
+    >
+      <TopBar title="Detalle de venta" onBack={() => navigation.goBack()} />
 
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.hero}>
-          <View style={styles.iconWrap}>
+          <View
+            style={[
+              styles.iconWrap,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+            ]}
+          >
             <MaterialCommunityIcons
               name="receipt"
               size={28}
               color={colors.textSecondary}
             />
           </View>
-          <Text style={styles.numero}>{venta.numero}</Text>
-          <Text style={styles.fecha}>
+          <Text style={[styles.numero, { color: colors.textPrimary }]}>
+            {venta.numero}
+          </Text>
+          <Text style={[styles.fecha, { color: colors.textMuted }]}>
             {formatDateTime(venta.created_at)}
           </Text>
           <View style={styles.badgeRow}>
@@ -167,7 +179,9 @@ export default function VentaDetalleScreen(): React.ReactElement {
         </View>
 
         <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Información</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+            Información
+          </Text>
           <InfoRow
             icon="account-outline"
             label="Vendedor"
@@ -195,7 +209,7 @@ export default function VentaDetalleScreen(): React.ReactElement {
         </Card>
 
         <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
             Productos ({venta.detalle.length})
           </Text>
           {venta.detalle.map((item, idx) => (
@@ -203,20 +217,31 @@ export default function VentaDetalleScreen(): React.ReactElement {
               key={item.id}
               style={[
                 styles.detalleItem,
+                { borderTopColor: colors.border },
                 idx === venta.detalle.length - 1
                   ? styles.detalleItemLast
                   : null,
               ]}
             >
               <View style={styles.detalleInfo}>
-                <Text style={styles.detalleNombre} numberOfLines={1}>
+                <Text
+                  style={[styles.detalleNombre, { color: colors.textPrimary }]}
+                  numberOfLines={1}
+                >
                   {item.producto_nombre}
                 </Text>
-                <Text style={styles.detalleSub}>
+                <Text
+                  style={[styles.detalleSub, { color: colors.textMuted }]}
+                >
                   {formatCurrency(item.precio_unitario)} × {item.cantidad}
                 </Text>
               </View>
-              <Text style={styles.detalleSubtotal}>
+              <Text
+                style={[
+                  styles.detalleSubtotal,
+                  { color: colors.textPrimary },
+                ]}
+              >
                 {formatCurrency(item.subtotal)}
               </Text>
             </View>
@@ -224,7 +249,9 @@ export default function VentaDetalleScreen(): React.ReactElement {
         </Card>
 
         <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Resumen</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+            Resumen
+          </Text>
           <TotalRow label="Subtotal" value={formatCurrency(venta.subtotal)} />
           {tieneDescuento ? (
             <TotalRow
@@ -233,7 +260,7 @@ export default function VentaDetalleScreen(): React.ReactElement {
               valueColor={colors.danger}
             />
           ) : null}
-          <View style={styles.divider} />
+          <View style={[styles.divider, { backgroundColor: colors.border }]} />
           <TotalRow
             label="Total"
             value={formatCurrency(venta.total)}
@@ -260,7 +287,7 @@ export default function VentaDetalleScreen(): React.ReactElement {
             label="Anular venta"
             variant="danger"
             icon="close-circle-outline"
-            onPress={() => setModalAnular(true)}
+            onPress={confirmarAnular}
             fullWidth
           />
         ) : null}
@@ -271,7 +298,7 @@ export default function VentaDetalleScreen(): React.ReactElement {
         onClose={() => setModalAnular(false)}
         title="Anular venta"
       >
-        <Text style={styles.modalText}>
+        <Text style={[styles.modalText, { color: colors.textSecondary }]}>
           Esta acción repondrá el stock y, si fue a crédito, revertirá la deuda
           del cliente.
         </Text>
@@ -291,19 +318,8 @@ export default function VentaDetalleScreen(): React.ReactElement {
           fullWidth
         />
       </Modal>
-
-      <Toast
-        visible={toast.visible}
-        message={toast.message}
-        variant={toast.variant}
-        onHide={() => setToast((t) => ({ ...t, visible: false }))}
-      />
     </SafeAreaView>
   );
-}
-
-function Topbar(props: { onBack: () => void }): React.ReactElement {
-  return <TopBar title="Detalle de venta" onBack={props.onBack} />;
 }
 
 function InfoRow(props: {
@@ -311,16 +327,21 @@ function InfoRow(props: {
   label: string;
   value: string;
 }): React.ReactElement {
+  const colors = useColors();
   return (
-    <View style={styles.infoRow}>
+    <View style={[styles.infoRow, { borderTopColor: colors.border }]}>
       <MaterialCommunityIcons
         name={props.icon}
         size={16}
         color={colors.textMuted}
       />
       <View style={styles.infoText}>
-        <Text style={styles.infoLabel}>{props.label}</Text>
-        <Text style={styles.infoValue}>{props.value}</Text>
+        <Text style={[styles.infoLabel, { color: colors.textMuted }]}>
+          {props.label}
+        </Text>
+        <Text style={[styles.infoValue, { color: colors.textPrimary }]}>
+          {props.value}
+        </Text>
       </View>
     </View>
   );
@@ -332,21 +353,21 @@ function TotalRow(props: {
   bold?: boolean;
   valueColor?: string;
 }): React.ReactElement {
+  const colors = useColors();
   return (
     <View style={styles.totalRow}>
       <Text
         style={[
-          styles.totalLabel,
-          props.bold ? styles.totalLabelBold : null,
+          props.bold ? styles.totalLabelBold : styles.totalLabel,
+          { color: props.bold ? colors.textPrimary : colors.textSecondary },
         ]}
       >
         {props.label}
       </Text>
       <Text
         style={[
-          styles.totalValue,
-          props.bold ? styles.totalValueBold : null,
-          props.valueColor ? { color: props.valueColor } : null,
+          props.bold ? styles.totalValueBold : styles.totalValue,
+          { color: props.valueColor ?? colors.textPrimary },
         ]}
       >
         {props.value}
@@ -356,99 +377,59 @@ function TotalRow(props: {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  topbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  topbarTitle: { ...typography.h3, color: colors.textPrimary },
+  safe: { flex: 1 },
   scroll: { padding: spacing.lg, paddingBottom: spacing.giant },
   hero: { alignItems: 'center', marginBottom: spacing.xl },
   iconWrap: {
     width: 64,
     height: 64,
     borderRadius: radius.xl,
-    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.md,
   },
-  numero: { ...typography.h2, color: colors.textPrimary },
-  fecha: { ...typography.caption, color: colors.textMuted, marginTop: 4 },
+  numero: { ...typography.h2 },
+  fecha: { ...typography.caption, marginTop: 4 },
   badgeRow: {
     flexDirection: 'row',
     gap: spacing.sm,
     marginTop: spacing.md,
   },
   section: { marginBottom: spacing.md },
-  sectionTitle: {
-    ...typography.h3,
-    color: colors.textPrimary,
-    marginBottom: spacing.lg,
-  },
+  sectionTitle: { ...typography.h3, marginBottom: spacing.lg },
   infoRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     paddingVertical: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
     gap: spacing.md,
   },
   infoText: { flex: 1 },
-  infoLabel: { ...typography.small, color: colors.textMuted },
-  infoValue: {
-    ...typography.body,
-    color: colors.textPrimary,
-    marginTop: 2,
-  },
+  infoLabel: { ...typography.small },
+  infoValue: { ...typography.body, marginTop: 2 },
   detalleItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
   },
   detalleItemLast: { borderBottomWidth: 0 },
   detalleInfo: { flex: 1 },
-  detalleNombre: { ...typography.body, color: colors.textPrimary },
-  detalleSub: { ...typography.small, color: colors.textMuted, marginTop: 2 },
-  detalleSubtotal: { ...typography.bodyBold, color: colors.textPrimary },
+  detalleNombre: { ...typography.body },
+  detalleSub: { ...typography.small, marginTop: 2 },
+  detalleSubtotal: { ...typography.bodyBold },
   totalRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingVertical: 6,
   },
-  totalLabel: { ...typography.caption, color: colors.textSecondary },
-  totalLabelBold: { ...typography.bodyBold, color: colors.textPrimary },
-  totalValue: { ...typography.bodyBold, color: colors.textPrimary },
-  totalValueBold: { ...typography.price, color: colors.textPrimary },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: spacing.sm,
-  },
-  modalText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    marginBottom: spacing.lg,
-  },
-  actionsWrap: {
-    marginBottom: spacing.md,
-  },
+  totalLabel: { ...typography.caption },
+  totalLabelBold: { ...typography.bodyBold },
+  totalValue: { ...typography.bodyBold },
+  totalValueBold: { ...typography.price },
+  divider: { height: 1, marginVertical: spacing.sm },
+  modalText: { ...typography.caption, marginBottom: spacing.lg },
+  actionsWrap: { marginBottom: spacing.md },
 });

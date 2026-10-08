@@ -1,7 +1,8 @@
 import React from 'react';
 import { Pressable, Text, StyleSheet, ViewStyle } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 
 interface ChipProps {
   label: string;
@@ -20,13 +21,20 @@ export default function Chip({
   style,
   disabled = false,
 }: ChipProps): React.ReactElement {
+  const colors = useColors();
+
+  const bg = active ? colors.primary : colors.surface;
+  const border = active ? colors.primary : colors.border;
+  const textColor = active ? colors.textInverse : colors.textSecondary;
+  const iconColor = active ? colors.textInverse : colors.textSecondary;
+
   return (
     <Pressable
       onPress={disabled ? undefined : onPress}
       disabled={disabled}
       style={[
         styles.base,
-        active ? styles.active : null,
+        { backgroundColor: bg, borderColor: border },
         disabled ? styles.disabled : null,
         style,
       ]}
@@ -36,11 +44,17 @@ export default function Chip({
         <MaterialCommunityIcons
           name={icon}
           size={14}
-          color={active ? colors.textInverse : colors.textSecondary}
+          color={iconColor}
           style={styles.icon}
         />
       ) : null}
-      <Text style={[styles.label, active ? styles.labelActive : null]}>
+      <Text
+        style={[
+          styles.label,
+          { color: textColor },
+          active ? styles.labelActive : null,
+        ]}
+      >
         {label}
       </Text>
     </Pressable>
@@ -55,19 +69,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: radius.pill,
-    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
-  },
-  active: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
   },
   disabled: { opacity: 0.5 },
   icon: { marginRight: 4 },
-  label: { ...typography.small, color: colors.textSecondary },
+  label: { ...typography.small },
   labelActive: {
-    color: colors.textInverse,
     fontFamily: typography.button.fontFamily,
   },
 });

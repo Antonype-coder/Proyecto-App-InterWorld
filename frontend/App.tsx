@@ -12,6 +12,7 @@ import {
 } from '@expo-google-fonts/inter';
 
 import { paperTheme } from '@theme/index';
+import { ConfirmProvider } from '@components/feedback/ConfirmProvider';
 import RootNavigator from '@navigation/RootNavigator';
 
 export default function App(): React.ReactElement | null {
@@ -29,10 +30,12 @@ export default function App(): React.ReactElement | null {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <PaperProvider theme={paperTheme}>
-          <StatusBar style="dark" />
-          <RootNavigator />
-        </PaperProvider>
+        <ConfirmProvider>
+          <PaperProvider theme={paperTheme}>
+            <StatusBar style="auto" />
+            <RootNavigator />
+          </PaperProvider>
+        </ConfirmProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
 import { SafeAreaView, Edge } from 'react-native-safe-area-context';
-import { colors } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 
 interface AppScreenProps {
   children: React.ReactNode;
@@ -13,11 +13,14 @@ interface AppScreenProps {
 export default function AppScreen({
   children,
   edges = ['top'],
-  bg = colors.bg,
+  bg,
   style,
 }: AppScreenProps): React.ReactElement {
+  const colors = useColors();
+  const backgroundColor = bg ?? colors.bg;
+
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: bg }]} edges={edges}>
+    <SafeAreaView style={[styles.safe, { backgroundColor }]} edges={edges}>
       <View style={[styles.container, style]}>{children}</View>
     </SafeAreaView>
   );

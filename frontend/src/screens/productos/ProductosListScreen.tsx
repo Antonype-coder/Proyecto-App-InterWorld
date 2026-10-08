@@ -14,19 +14,23 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
 import { useAuthStore } from '@store/authStore';
+import { useColors } from '@hooks/useColors';
 import { useProductosStore } from '@store/productosStore';
 import { useDebounce } from '@hooks/useDebounce';
+import { FadeInItem } from '@components/animations';
 import ProductoItem from '@components/domain/ProductoItem';
 import FAB from '@components/ui/FAB';
-import EmptyState from '@components/ui/EmptyState';
-import Skeleton from '@components/ui/Skeleton';
+import RichEmptyState from '@components/ui/RichEmptyState';
+import SkeletonProducto from '@components/ui/SkeletonProducto';
+import ErrorState from '@components/feedback/ErrorState';
 import Chip from '@components/ui/Chip';
 
 export default function ProductosListScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
   const user = useAuthStore((s) => s.user);
+  const colors = useColors();
   const {
     productos,
     categorias,
@@ -70,12 +74,19 @@ export default function ProductosListScreen(): React.ReactElement {
     navigation.navigate('ProductoForm' as never);
   };
 
+  const hayFiltro = busqueda.length > 0 || categoriaFiltro !== null;
+
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+      edges={['top']}
+    >
       <View style={styles.header}>
         <View>
-          <Text style={styles.title}>Productos</Text>
-          <Text style={styles.subtitle}>
+          <Text style={[styles.title, { color: colors.textPrimary }]}>
+            Productos
+          </Text>
+          <Text style={[styles.subtitle, { color: colors.textSecondary }]}>
             {productos.length}{' '}
             {productos.length === 1 ? 'producto' : 'productos'}
           </Text>
@@ -83,7 +94,15 @@ export default function ProductosListScreen(): React.ReactElement {
       </View>
 
       <View style={styles.searchWrapper}>
-        <View style={styles.searchBox}>
+        <View
+          style={[
+            styles.searchBox,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}
+        >
           <MaterialCommunityIcons
             name="magnify"
             size={18}
@@ -94,7 +113,7 @@ export default function ProductosListScreen(): React.ReactElement {
             placeholderTextColor={colors.textMuted}
             value={busqueda}
             onChangeText={setBusqueda}
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: colors.textPrimary }]}
             autoCapitalize="none"
             autoCorrect={false}
           />
@@ -132,47 +151,53 @@ export default function ProductosListScreen(): React.ReactElement {
       </ScrollView>
 
       {loading && productos.length === 0 ? (
-        <View style={styles.listWrapper}>
+        <View>
           {[1, 2, 3, 4, 5].map((i) => (
-            <View key={i} style={styles.skelItem}>
-              <Skeleton width={40} height={40} borderRadius={8} />
-              <View style={{ flex: 1, marginLeft: spacing.md }}>
-                <Skeleton width="70%" height={14} />
-                <Skeleton
-                  width="40%"
-                  height={12}
-                  style={{ marginTop: 6 }}
-                />
-              </View>
-            </View>
+            <SkeletonProducto key={i} />
           ))}
         </View>
-      ) : error ? (
-        <EmptyState
-          icon="alert-circle-outline"
-          title="Error al cargar"
-          description={error}
-          actionLabel="Reintentar"
-          onAction={cargarDatos}
+      ) : error && productos.length === 0 ? (
+        <ErrorState
+          title="No pudimos cargar los productos"
+          message="Revisa tu conexión e intenta de nuevo."
+          technicalMessage={error}
+          onRetry={cargarDatos}
         />
       ) : productos.length === 0 ? (
-        <EmptyState
-          icon="package-variant"
-          title="Sin productos"
+        <RichEmptyState
+          icon={hayFiltro ? 'magnify-close' : 'package-variant'}
+          title={hayFiltro ? 'Sin resultados' : 'Sin productos aún'}
           description={
-            busqueda || categoriaFiltro
-              ? 'No hay productos que coincidan con tu búsqueda.'
-              : 'Aún no has agregado ningún producto.'
+            hayFiltro
+              ? 'Prueba con otro término o quita los filtros.'
+              : esAdmin
+                ? 'Agrega tu primer producto para empezar a vender.'
+                : 'Aún no hay productos en el catálogo.'
           }
-          actionLabel={esAdmin ? 'Agregar producto' : undefined}
-          onAction={esAdmin ? irANuevo : undefined}
+          actionLabel={esAdmin && !hayFiltro ? 'Agregar producto' : undefined}
+          onAction={esAdmin && !hayFiltro ? irANuevo : undefined}
+          secondaryLabel={hayFiltro ? 'Limpiar filtros' : undefined}
+          onSecondary={
+            hayFiltro
+              ? () => {
+                  setBusqueda('');
+                  setCategoriaFiltro(null);
+                }
+              : undefined
+          }
         />
       ) : (
         <FlatList
           data={productos}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.listContent}
-          style={styles.list}
+          style={[
+            styles.list,
+            {
+              backgroundColor: colors.surface,
+              borderTopColor: colors.border,
+            },
+          ]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -180,16 +205,18 @@ export default function ProductosListScreen(): React.ReactElement {
               tintColor={colors.textSecondary}
             />
           }
-          renderItem={({ item }) => (
-            <ProductoItem
-              producto={item}
-              onPress={() =>
-                navigation.navigate(
-                  'ProductoDetalle' as never,
-                  { productId: item.id } as never,
-                )
-              }
-            />
+          renderItem={({ item, index }) => (
+            <FadeInItem delay={Math.min(index * 20, 240)}>
+              <ProductoItem
+                producto={item}
+                onPress={() =>
+                  navigation.navigate(
+                    'ProductoDetalle' as never,
+                    { productId: item.id } as never,
+                  )
+                }
+              />
+            </FadeInItem>
           )}
         />
       )}
@@ -207,16 +234,15 @@ export default function ProductosListScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
+  safe: { flex: 1 },
   header: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
     paddingBottom: spacing.lg,
   },
-  title: { ...typography.h1, color: colors.textPrimary },
+  title: { ...typography.h1 },
   subtitle: {
     ...typography.caption,
-    color: colors.textSecondary,
     marginTop: 2,
   },
   searchWrapper: {
@@ -228,9 +254,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     height: 40,
@@ -238,7 +262,6 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     ...typography.body,
-    color: colors.textPrimary,
     marginLeft: spacing.sm,
     paddingVertical: 0,
   },
@@ -250,19 +273,8 @@ const styles = StyleSheet.create({
   },
   list: {
     flex: 1,
-    backgroundColor: colors.surface,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
   },
   listContent: { paddingBottom: 100 },
-  listWrapper: { paddingHorizontal: spacing.lg },
-  skelItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
   fab: { position: 'absolute', right: spacing.lg, bottom: spacing.lg },
 });

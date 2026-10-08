@@ -2,13 +2,9 @@ import React, { useEffect, useRef } from 'react';
 import { Animated, Text, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  colors,
-  radius,
-  spacing,
-  shadows,
-  typography,
-} from '@theme/index';
+import { radius, spacing, shadows, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
+import type { AppColors } from '@theme/index';
 import type { ToastVariant } from '@tipos/index';
 
 interface ToastProps {
@@ -27,6 +23,7 @@ export default function Toast({
   onHide,
 }: ToastProps): React.ReactElement | null {
   const insets = useSafeAreaInsets();
+  const colors = useColors();
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(-12)).current;
 
@@ -67,7 +64,7 @@ export default function Toast({
 
   if (!visible) return null;
 
-  const config = getConfig(variant);
+  const config = getConfig(variant, colors);
 
   return (
     <Animated.View
@@ -77,9 +74,11 @@ export default function Toast({
           top: insets.top + spacing.sm,
           backgroundColor: config.bg,
           borderLeftColor: config.accent,
+          borderColor: colors.border,
           opacity,
           transform: [{ translateY }],
         },
+        shadows.lg,
       ]}
     >
       <MaterialCommunityIcons
@@ -95,7 +94,10 @@ export default function Toast({
   );
 }
 
-function getConfig(variant: ToastVariant): {
+function getConfig(
+  variant: ToastVariant,
+  colors: AppColors,
+): {
   bg: string;
   text: string;
   accent: string;
@@ -142,11 +144,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderRadius: radius.lg,
+    borderWidth: 1,
     borderLeftWidth: 3,
     flexDirection: 'row',
     alignItems: 'center',
     zIndex: 999,
-    ...shadows.lg,
   },
   icon: { marginRight: spacing.sm },
   text: { ...typography.bodyBold, flex: 1 },

@@ -1,10 +1,12 @@
 import React, { useEffect } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { CommonActions } from '@react-navigation/native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { colors, typography } from '@theme/index';
+import { typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 import type { AppTabsParamList } from '@tipos/index';
 
 import DashboardStack from './stacks/DashboardStack';
@@ -18,8 +20,42 @@ import { useConfiguracionStore } from '@store/configuracionStore';
 
 const Tab = createBottomTabNavigator<AppTabsParamList>();
 
+type TabName = 'Inicio' | 'Productos' | 'Ventas' | 'Mas';
+
+/**
+ * Listener de tabPress que resetea el stack de la tab al root.
+ * Usa CommonActions.reset con target al nested navigator para
+ * descartar toda la pila previa (no hace push, resetea de verdad).
+ */
+function makeTabPressListener(tabName: TabName, rootScreen: string) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return ({ navigation }: any) => ({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    tabPress: (e: any) => {
+      const state = navigation.getState();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const route = state.routes.find((r: any) => r.name === tabName);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const nestedState = route?.state as any;
+      const nestedIndex = nestedState?.index ?? 0;
+
+      if (nestedIndex > 0 && nestedState?.key) {
+        e.preventDefault();
+        navigation.dispatch({
+          ...CommonActions.reset({
+            index: 0,
+            routes: [{ name: rootScreen }],
+          }),
+          target: nestedState.key,
+        });
+      }
+    },
+  });
+}
+
 export default function AppTabs(): React.ReactElement {
   const insets = useSafeAreaInsets();
+  const colors = useColors();
   const cargarConfiguracion = useConfiguracionStore((state) => state.cargar);
 
   useEffect(() => {
@@ -52,6 +88,7 @@ export default function AppTabs(): React.ReactElement {
       <Tab.Screen
         name="Inicio"
         component={DashboardStack}
+        listeners={makeTabPressListener('Inicio', 'Dashboard')}
         options={{
           tabBarLabel: 'Inicio',
           tabBarIcon: ({ color, focused }) => (
@@ -66,6 +103,7 @@ export default function AppTabs(): React.ReactElement {
       <Tab.Screen
         name="Productos"
         component={ProductosStack}
+        listeners={makeTabPressListener('Productos', 'ProductosList')}
         options={{
           tabBarLabel: 'Productos',
           tabBarIcon: ({ color, focused }) => (
@@ -89,6 +127,7 @@ export default function AppTabs(): React.ReactElement {
       <Tab.Screen
         name="Ventas"
         component={VentasStack}
+        listeners={makeTabPressListener('Ventas', 'VentasList')}
         options={{
           tabBarLabel: 'Ventas',
           tabBarIcon: ({ color, focused }) => (
@@ -103,6 +142,7 @@ export default function AppTabs(): React.ReactElement {
       <Tab.Screen
         name="Mas"
         component={MasStack}
+        listeners={makeTabPressListener('Mas', 'MasHome')}
         options={{
           tabBarLabel: 'Más',
           tabBarIcon: ({ color, focused }) => (
@@ -119,7 +159,6 @@ export default function AppTabs(): React.ReactElement {
         }}
       />
 
-      {/* ✅ Pantalla oculta: Escáner de códigos de barras */}
       <Tab.Screen
         name="ProductoScanner"
         component={ProductoScannerScreen}
@@ -144,6 +183,7 @@ export default function AppTabs(): React.ReactElement {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function VenderTabButton(props: any): React.ReactElement {
+  const colors = useColors();
   const focused = props.accessibilityState?.selected;
 
   return (
@@ -156,7 +196,7 @@ function VenderTabButton(props: any): React.ReactElement {
       <View
         style={[
           styles.venderButton,
-          focused ? styles.venderButtonActive : null,
+          { backgroundColor: focused ? colors.accent : colors.primary },
         ]}
       >
         <MaterialCommunityIcons
@@ -180,7 +220,6 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -188,8 +227,5 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 6,
-  },
-  venderButtonActive: {
-    backgroundColor: colors.accent,
   },
 });

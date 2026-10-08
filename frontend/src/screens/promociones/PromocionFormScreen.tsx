@@ -3,17 +3,17 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
+import { useSuccessPulse } from '@hooks/useSuccessPulse';
 import { promocionesApi, productosApi, categoriasApi } from '@api/index';
 import type {
-  Promocion,
   TipoPromocion,
   AplicaA,
   Producto,
   Categoria,
   MasStackParamList,
 } from '@tipos/index';
-import { formatDate } from '@utils/format';
 import KeyboardScreen from '@components/layout/KeyboardScreen';
 import TopBar from '@components/layout/TopBar';
 import Card from '@components/ui/Card';
@@ -21,6 +21,7 @@ import Button from '@components/ui/Button';
 import Input from '@components/ui/Input';
 import FormattedNumberInput from '@components/forms/FormattedNumberInput';
 import Toast from '@components/ui/Toast';
+import { SuccessPulse } from '@components/feedback';
 import type { ToastVariant } from '@tipos/index';
 
 type Params = RouteProp<MasStackParamList, 'PromocionForm'>;
@@ -44,6 +45,7 @@ export default function PromocionFormScreen(): React.ReactElement {
   const route = useRoute<Params>();
   const promocionId = route.params?.promocionId;
   const editando = typeof promocionId === 'number';
+  const colors = useColors();
 
   const [nombre, setNombre] = useState('');
   const [descripcion, setDescripcion] = useState('');
@@ -61,6 +63,7 @@ export default function PromocionFormScreen(): React.ReactElement {
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(editando);
+  const [pulseVisible, triggerPulse] = useSuccessPulse();
 
   const [toast, setToast] = useState<{
     visible: boolean;
@@ -117,15 +120,27 @@ export default function PromocionFormScreen(): React.ReactElement {
       return;
     }
     if (fechaFin <= fechaInicio) {
-      setToast({ visible: true, message: 'La fecha fin debe ser posterior a la fecha inicio.', variant: 'error' });
+      setToast({
+        visible: true,
+        message: 'La fecha fin debe ser posterior a la fecha inicio.',
+        variant: 'error',
+      });
       return;
     }
     if (aplicaA === 'producto' && productoId === null) {
-      setToast({ visible: true, message: 'Selecciona el producto de la promoción.', variant: 'error' });
+      setToast({
+        visible: true,
+        message: 'Selecciona el producto de la promoción.',
+        variant: 'error',
+      });
       return;
     }
     if (aplicaA === 'categoria' && categoriaId === null) {
-      setToast({ visible: true, message: 'Selecciona la categoría de la promoción.', variant: 'error' });
+      setToast({
+        visible: true,
+        message: 'Selecciona la categoría de la promoción.',
+        variant: 'error',
+      });
       return;
     }
     if (['porcentaje', 'monto_fijo', 'precio_especial'].includes(tipo)) {
@@ -137,9 +152,10 @@ export default function PromocionFormScreen(): React.ReactElement {
       ) {
         setToast({
           visible: true,
-          message: tipo === 'porcentaje'
-            ? 'El porcentaje debe estar entre 1 y 100.'
-            : 'Ingresa un valor mayor que cero.',
+          message:
+            tipo === 'porcentaje'
+              ? 'El porcentaje debe estar entre 1 y 100.'
+              : 'Ingresa un valor mayor que cero.',
           variant: 'error',
         });
         return;
@@ -161,15 +177,14 @@ export default function PromocionFormScreen(): React.ReactElement {
         fecha_fin: fechaFin,
         activo: activo ? 1 : 0,
       };
-
       if (editando && promocionId) {
         await promocionesApi.actualizar(promocionId, payload);
       } else {
         await promocionesApi.crear(payload);
       }
-
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      navigation.goBack();
+      triggerPulse();
+      setTimeout(() => navigation.goBack(), 700);
     } catch (e) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const msg = e instanceof Error ? e.message : 'Error al guardar';
@@ -180,128 +195,14 @@ export default function PromocionFormScreen(): React.ReactElement {
   };
 
   return (
-    <KeyboardScreen>
-      <TopBar
-        title={editando ? 'Editar promoción' : 'Nueva promoción'}
-        onBack={() => navigation.goBack()}
-      />
-
-      <View style={styles.content}>
-        <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Información</Text>
-          <Input label="Nombre" value={nombre} onChangeText={setNombre} required />
-          <Input label="Descripción" placeholder="Opcional" value={descripcion} onChangeText={setDescripcion} multiline />
-        </Card>
-
-        <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Tipo de promoción</Text>
-          <View style={styles.chipsWrap}>
-            {TIPOS.map((t) => (
-              <ChipBtn
-                key={t.value}
-                label={t.label}
-                active={tipo === t.value}
-                onPress={() => setTipo(t.value)}
-              />
-            ))}
-          </View>
-
-          {(tipo === 'porcentaje' || tipo === 'monto_fijo' || tipo === 'precio_especial') ? (
-            <FormattedNumberInput
-              label={tipo === 'porcentaje' ? 'Porcentaje (%)' : 'Valor ($)'}
-              value={valor}
-              onChangeText={setValor}
-            />
-          ) : null}
-        </Card>
-
-        <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Aplica a</Text>
-          <View style={styles.chipsWrap}>
-            {APLICACIONES.map((a) => (
-              <ChipBtn
-                key={a.value}
-                label={a.label}
-                active={aplicaA === a.value}
-                onPress={() => setAplicaA(a.value)}
-              />
-            ))}
-          </View>
-
-          {aplicaA === 'producto' ? (
-            <>
-              <Text style={styles.label}>Producto</Text>
-              <View style={styles.selector}>
-                {productos.slice(0, 30).map((p) => (
-                  <Pressable
-                    key={p.id}
-                    onPress={() => setProductoId(p.id)}
-                    style={[styles.selectorItem, productoId === p.id ? styles.selectorItemActive : null]}
-                  >
-                    <Text
-                      style={[styles.selectorText, productoId === p.id ? styles.selectorTextActive : null]}
-                      numberOfLines={1}
-                    >
-                      {p.nombre}
-                    </Text>
-                  </Pressable>
-                ))}
-              </View>
-            </>
-          ) : null}
-
-          {aplicaA === 'categoria' ? (
-            <>
-              <Text style={styles.label}>Categoría</Text>
-              <View style={styles.chipsWrap}>
-                {categorias.map((c) => (
-                  <ChipBtn
-                    key={c.id}
-                    label={c.nombre}
-                    active={categoriaId === c.id}
-                    onPress={() => setCategoriaId(c.id)}
-                  />
-                ))}
-              </View>
-            </>
-          ) : null}
-        </Card>
-
-        <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Vigencia</Text>
-          <Input
-            label="Fecha inicio"
-            value={fechaInicio}
-            onChangeText={setFechaInicio}
-            required
-          />
-          <Input
-            label="Fecha fin"
-            value={fechaFin}
-            onChangeText={setFechaFin}
-            required
-          />
-        </Card>
-
-        <Card variant="default" style={styles.section}>
-          <Pressable
-            onPress={() => setActivo((v) => !v)}
-            style={styles.switchRow}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={styles.switchLabel}>Promoción activa</Text>
-              <Text style={styles.switchHelper}>
-                {activo ? 'Se aplicará automáticamente en el POS' : 'No se aplicará'}
-              </Text>
-            </View>
-            <View style={[styles.check, activo ? styles.checkActive : null]}>
-              {activo ? (
-                <Text style={{ color: colors.textInverse, fontSize: 14 }}>✓</Text>
-              ) : null}
-            </View>
-          </Pressable>
-        </Card>
-
+    <KeyboardScreen
+      header={
+        <TopBar
+          title={editando ? 'Editar promoción' : 'Nueva promoción'}
+          onBack={() => navigation.goBack()}
+        />
+      }
+      footer={
         <Button
           label={editando ? 'Guardar cambios' : 'Crear promoción'}
           onPress={onSubmit}
@@ -311,7 +212,169 @@ export default function PromocionFormScreen(): React.ReactElement {
           size="lg"
           fullWidth
         />
-      </View>
+      }
+    >
+      <Card variant="default" style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+          Información
+        </Text>
+        <Input label="Nombre" value={nombre} onChangeText={setNombre} required />
+        <Input
+          label="Descripción"
+          placeholder="Opcional"
+          value={descripcion}
+          onChangeText={setDescripcion}
+          multiline
+        />
+      </Card>
+
+      <Card variant="default" style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+          Tipo de promoción
+        </Text>
+        <View style={styles.chipsWrap}>
+          {TIPOS.map((t) => (
+            <ChipBtn
+              key={t.value}
+              label={t.label}
+              active={tipo === t.value}
+              onPress={() => setTipo(t.value)}
+            />
+          ))}
+        </View>
+
+        {tipo === 'porcentaje' ||
+        tipo === 'monto_fijo' ||
+        tipo === 'precio_especial' ? (
+          <FormattedNumberInput
+            label={tipo === 'porcentaje' ? 'Porcentaje (%)' : 'Valor ($)'}
+            value={valor}
+            onChangeText={setValor}
+          />
+        ) : null}
+      </Card>
+
+      <Card variant="default" style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+          Aplica a
+        </Text>
+        <View style={styles.chipsWrap}>
+          {APLICACIONES.map((a) => (
+            <ChipBtn
+              key={a.value}
+              label={a.label}
+              active={aplicaA === a.value}
+              onPress={() => setAplicaA(a.value)}
+            />
+          ))}
+        </View>
+
+        {aplicaA === 'producto' ? (
+          <>
+            <Text style={[styles.label, { color: colors.textPrimary }]}>
+              Producto
+            </Text>
+            <View style={styles.selector}>
+              {productos.slice(0, 30).map((p) => (
+                <Pressable
+                  key={p.id}
+                  onPress={() => setProductoId(p.id)}
+                  style={[
+                    styles.selectorItem,
+                    { backgroundColor: colors.bgSubtle },
+                    productoId === p.id
+                      ? { backgroundColor: colors.primary }
+                      : null,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.selectorText,
+                      { color: colors.textPrimary },
+                      productoId === p.id
+                        ? {
+                            color: colors.textInverse,
+                            fontFamily: typography.button.fontFamily,
+                          }
+                        : null,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {p.nombre}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </>
+        ) : null}
+
+        {aplicaA === 'categoria' ? (
+          <>
+            <Text style={[styles.label, { color: colors.textPrimary }]}>
+              Categoría
+            </Text>
+            <View style={styles.chipsWrap}>
+              {categorias.map((c) => (
+                <ChipBtn
+                  key={c.id}
+                  label={c.nombre}
+                  active={categoriaId === c.id}
+                  onPress={() => setCategoriaId(c.id)}
+                />
+              ))}
+            </View>
+          </>
+        ) : null}
+      </Card>
+
+      <Card variant="default" style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+          Vigencia
+        </Text>
+        <Input
+          label="Fecha inicio"
+          value={fechaInicio}
+          onChangeText={setFechaInicio}
+          required
+        />
+        <Input
+          label="Fecha fin"
+          value={fechaFin}
+          onChangeText={setFechaFin}
+          required
+        />
+      </Card>
+
+      <Card variant="default" style={styles.section}>
+        <Pressable onPress={() => setActivo((v) => !v)} style={styles.switchRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={[styles.switchLabel, { color: colors.textPrimary }]}>
+              Promoción activa
+            </Text>
+            <Text style={[styles.switchHelper, { color: colors.textMuted }]}>
+              {activo
+                ? 'Se aplicará automáticamente en el POS'
+                : 'No se aplicará'}
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.check,
+              { borderColor: colors.border },
+              activo
+                ? {
+                    backgroundColor: colors.primary,
+                    borderColor: colors.primary,
+                  }
+                : null,
+            ]}
+          >
+            {activo ? (
+              <Text style={{ color: colors.textInverse, fontSize: 14 }}>✓</Text>
+            ) : null}
+          </View>
+        </Pressable>
+      </Card>
 
       <Toast
         visible={toast.visible}
@@ -319,17 +382,44 @@ export default function PromocionFormScreen(): React.ReactElement {
         variant={toast.variant}
         onHide={() => setToast((t) => ({ ...t, visible: false }))}
       />
+
+      <SuccessPulse
+        visible={pulseVisible}
+        label={editando ? 'Promoción actualizada' : 'Promoción creada'}
+      />
     </KeyboardScreen>
   );
 }
 
-function ChipBtn(props: { label: string; active: boolean; onPress: () => void }): React.ReactElement {
+function ChipBtn(props: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}): React.ReactElement {
+  const colors = useColors();
   return (
     <Pressable
       onPress={props.onPress}
-      style={[styles.chip, props.active ? styles.chipActive : null]}
+      style={[
+        styles.chip,
+        { backgroundColor: colors.surface, borderColor: colors.border },
+        props.active
+          ? { backgroundColor: colors.primary, borderColor: colors.primary }
+          : null,
+      ]}
     >
-      <Text style={[styles.chipText, props.active ? styles.chipTextActive : null]}>
+      <Text
+        style={[
+          styles.chipText,
+          { color: colors.textSecondary },
+          props.active
+            ? {
+                color: colors.textInverse,
+                fontFamily: typography.button.fontFamily,
+              }
+            : null,
+        ]}
+      >
         {props.label}
       </Text>
     </Pressable>
@@ -344,34 +434,38 @@ function toISODate(d: Date): string {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.lg, paddingBottom: spacing.giant },
   section: { marginBottom: spacing.md },
-  sectionTitle: { ...typography.h3, color: colors.textPrimary, marginBottom: spacing.md },
-  chipsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
-  chip: {
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border,
-    backgroundColor: colors.surface,
+  sectionTitle: { ...typography.h3, marginBottom: spacing.md },
+  chipsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.md,
   },
-  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  chipText: { ...typography.small, color: colors.textSecondary },
-  chipTextActive: { color: colors.textInverse, fontFamily: typography.button.fontFamily },
-  label: { ...typography.bodyBold, color: colors.textPrimary, marginBottom: spacing.sm },
+  chip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+  },
+  chipText: { ...typography.small },
+  label: { ...typography.bodyBold, marginBottom: spacing.sm },
   selector: { gap: spacing.xs, maxHeight: 200 },
   selectorItem: {
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    backgroundColor: colors.bgSubtle, borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
   },
-  selectorItemActive: { backgroundColor: colors.primary },
-  selectorText: { ...typography.small, color: colors.textPrimary },
-  selectorTextActive: { color: colors.textInverse, fontFamily: typography.button.fontFamily },
+  selectorText: { ...typography.small },
   switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  switchLabel: { ...typography.bodyBold, color: colors.textPrimary },
-  switchHelper: { ...typography.small, color: colors.textMuted, marginTop: 2 },
+  switchLabel: { ...typography.bodyBold },
+  switchHelper: { ...typography.small, marginTop: 2 },
   check: {
-    width: 24, height: 24, borderRadius: 12,
-    borderWidth: 2, borderColor: colors.border,
-    alignItems: 'center', justifyContent: 'center',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  checkActive: { backgroundColor: colors.primary, borderColor: colors.primary },
 });

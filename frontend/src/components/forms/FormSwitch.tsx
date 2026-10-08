@@ -2,7 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Control, Controller, FieldValues, Path } from 'react-hook-form';
 import Switch from '../ui/Switch';
-import { colors, spacing, typography } from '@theme/index';
+import { spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 
 interface FormSwitchProps<T extends FieldValues> {
   control: Control<T>;
@@ -17,6 +18,8 @@ export default function FormSwitch<T extends FieldValues>({
   label,
   helper,
 }: FormSwitchProps<T>): React.ReactElement {
+  const colors = useColors();
+
   return (
     <Controller
       control={control}
@@ -24,8 +27,14 @@ export default function FormSwitch<T extends FieldValues>({
       render={({ field: { value, onChange } }) => (
         <View style={styles.row}>
           <View style={styles.info}>
-            <Text style={styles.label}>{label}</Text>
-            {helper ? <Text style={styles.helper}>{helper}</Text> : null}
+            <Text style={[styles.label, { color: colors.textPrimary }]}>
+              {label}
+            </Text>
+            {helper ? (
+              <Text style={[styles.helper, { color: colors.textMuted }]}>
+                {helper}
+              </Text>
+            ) : null}
           </View>
           <Switch value={Boolean(value)} onValueChange={onChange} />
         </View>
@@ -42,6 +51,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   info: { flex: 1 },
-  label: { ...typography.bodyBold, color: colors.textPrimary },
-  helper: { ...typography.small, color: colors.textMuted, marginTop: 2 },
+  label: { ...typography.bodyBold },
+  helper: { ...typography.small, marginTop: 2 },
 });

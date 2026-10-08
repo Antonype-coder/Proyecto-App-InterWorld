@@ -4,7 +4,8 @@ import { TextInputProps } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Input from '../ui/Input';
 
-interface FormInputProps<T extends FieldValues> extends Omit<TextInputProps, 'value' | 'onChangeText'> {
+interface FormInputProps<T extends FieldValues>
+  extends Omit<TextInputProps, 'value' | 'onChangeText'> {
   control: Control<T>;
   name: Path<T>;
   label?: string;

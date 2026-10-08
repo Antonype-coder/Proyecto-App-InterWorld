@@ -4,20 +4,21 @@ import {
   Text,
   StyleSheet,
   FlatList,
-  Pressable,
   RefreshControl,
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 import { inventarioApi } from '@api/index';
 import type { MovimientoInventario, TipoMovimiento } from '@tipos/index';
+import { FadeInItem } from '@components/animations';
 import MovimientoItem from '@components/domain/MovimientoItem';
-import EmptyState from '@components/ui/EmptyState';
-import Skeleton from '@components/ui/Skeleton';
+import RichEmptyState from '@components/ui/RichEmptyState';
+import SkeletonProducto from '@components/ui/SkeletonProducto';
+import ErrorState from '@components/feedback/ErrorState';
 import Chip from '@components/ui/Chip';
 import FAB from '@components/ui/FAB';
 import TopBar from '@components/layout/TopBar';
@@ -26,6 +27,7 @@ type Filtro = 'todos' | TipoMovimiento;
 
 export default function InventarioScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
+  const colors = useColors();
   const [movimientos, setMovimientos] = useState<MovimientoInventario[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -56,7 +58,10 @@ export default function InventarioScreen(): React.ReactElement {
   );
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+      edges={['top']}
+    >
       <TopBar title="Inventario" onBack={() => navigation.goBack()} />
 
       <ScrollView
@@ -87,43 +92,50 @@ export default function InventarioScreen(): React.ReactElement {
         />
       </ScrollView>
 
-      {loading ? (
-        <View style={styles.listWrapper}>
+      {loading && movimientos.length === 0 ? (
+        <View>
           {[1, 2, 3, 4, 5].map((i) => (
-            <View key={i} style={styles.skelItem}>
-              <Skeleton width={36} height={36} borderRadius={8} />
-              <View style={{ flex: 1, marginLeft: spacing.md }}>
-                <Skeleton width="70%" height={14} />
-                <Skeleton
-                  width="40%"
-                  height={12}
-                  style={{ marginTop: 6 }}
-                />
-              </View>
-            </View>
+            <SkeletonProducto key={i} />
           ))}
         </View>
-      ) : error ? (
-        <EmptyState
-          icon="alert-circle-outline"
-          title="Error al cargar"
-          description={error}
-          actionLabel="Reintentar"
-          onAction={cargar}
+      ) : error && movimientos.length === 0 ? (
+        <ErrorState
+          title="No pudimos cargar el inventario"
+          message="Revisa tu conexión e intenta de nuevo."
+          technicalMessage={error}
+          onRetry={cargar}
         />
       ) : movimientos.length === 0 ? (
-        <EmptyState
+        <RichEmptyState
           icon="swap-horizontal"
-          title="Sin movimientos"
-          description="Aún no hay movimientos de inventario."
-          actionLabel="Registrar movimiento"
-          onAction={() => navigation.navigate('MovimientoForm' as never)}
+          title={filtro === 'todos' ? 'Sin movimientos aún' : 'Sin resultados'}
+          description={
+            filtro === 'todos'
+              ? 'Los movimientos de stock aparecerán aquí cuando registres entradas, salidas o ajustes.'
+              : 'No hay movimientos con este filtro.'
+          }
+          actionLabel={filtro === 'todos' ? 'Registrar movimiento' : undefined}
+          onAction={
+            filtro === 'todos'
+              ? () => navigation.navigate('MovimientoForm' as never)
+              : undefined
+          }
+          secondaryLabel={filtro !== 'todos' ? 'Ver todos' : undefined}
+          onSecondary={
+            filtro !== 'todos' ? () => setFiltro('todos') : undefined
+          }
         />
       ) : (
         <FlatList
           data={movimientos}
           keyExtractor={(item) => String(item.id)}
-          style={styles.list}
+          style={[
+            styles.list,
+            {
+              backgroundColor: colors.surface,
+              borderTopColor: colors.border,
+            },
+          ]}
           contentContainerStyle={styles.listContent}
           refreshControl={
             <RefreshControl
@@ -135,7 +147,11 @@ export default function InventarioScreen(): React.ReactElement {
               tintColor={colors.textSecondary}
             />
           }
-          renderItem={({ item }) => <MovimientoItem movimiento={item} />}
+          renderItem={({ item, index }) => (
+            <FadeInItem delay={Math.min(index * 20, 240)}>
+              <MovimientoItem movimiento={item} />
+            </FadeInItem>
+          )}
         />
       )}
 
@@ -149,25 +165,7 @@ export default function InventarioScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    backgroundColor: colors.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: { ...typography.h3, color: colors.textPrimary },
+  safe: { flex: 1 },
   chipsScroll: { flexGrow: 0, maxHeight: 60, marginBottom: spacing.sm },
   chipsRow: {
     paddingHorizontal: spacing.lg,
@@ -175,21 +173,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.sm,
   },
-  list: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
+  list: { flex: 1, borderTopWidth: 1 },
   listContent: { paddingBottom: 100 },
-  listWrapper: { paddingHorizontal: spacing.lg },
-  skelItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.sm,
-  },
   fab: { position: 'absolute', right: spacing.lg, bottom: spacing.lg },
 });

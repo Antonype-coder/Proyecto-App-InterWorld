@@ -1,12 +1,10 @@
-// src/components/charts/BarChartCard.tsx
 import React from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { BarChart } from 'react-native-gifted-charts';
+import { radius, spacing, typography, shadows } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 
-import { colors, radius, spacing, typography } from '@theme/index';
-import Card from '@components/ui/Card';
-
-interface DataPoint {
+interface BarDataPoint {
   label: string;
   value: number;
 }
@@ -14,115 +12,106 @@ interface DataPoint {
 interface BarChartCardProps {
   title: string;
   subtitle?: string;
-  data: DataPoint[];
+  data: BarDataPoint[];
+  formatValue?: (value: number) => string;
   color?: string;
   height?: number;
-  formatValue?: (v: number) => string;
 }
 
 export default function BarChartCard({
   title,
   subtitle,
   data,
-  color = colors.accent,
-  height = 180,
   formatValue,
+  color,
+  height = 180,
 }: BarChartCardProps): React.ReactElement {
-  const screenWidth = Dimensions.get('window').width;
-  const chartWidth = screenWidth - spacing.lg * 4;
+  const colors = useColors();
+  const barColor = color ?? colors.chartPlum ?? colors.accent;
 
-  // Filtrar horas sin actividad para no saturar
-  const dataConActividad = data.filter((d) => d.value > 0);
-  const dataFinal = dataConActividad.length > 0 ? dataConActividad : data;
-
-  const chartData = dataFinal.map((d) => ({
-    value: d.value,
-    label: d.label,
-    frontColor: color,
-    topLabelComponent: () =>
-      d.value > 0 ? (
-        <Text style={styles.barLabel}>
-          {formatValue ? formatValue(d.value) : String(d.value)}
-        </Text>
-      ) : null,
+  const chartData = data.map((point) => ({
+    value: point.value,
+    label: point.label,
+    frontColor: barColor,
   }));
 
-  const maxValue = Math.max(...dataFinal.map((d) => d.value), 1);
-
-  if (data.length === 0) {
-    return (
-      <Card variant="default" style={styles.card}>
-        <Text style={styles.title}>{title}</Text>
-        {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
-        <View style={[styles.empty, { height }]}>
-          <Text style={styles.emptyText}>Sin datos suficientes</Text>
-        </View>
-      </Card>
-    );
-  }
-
   return (
-    <Card variant="default" style={styles.card}>
-      <Text style={styles.title}>{title}</Text>
-      {subtitle ? <Text style={styles.subtitle}>{subtitle}</Text> : null}
+    <View
+      style={[
+        styles.card,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+        },
+        shadows.xs,
+      ]}
+    >
+      <View style={styles.header}>
+        <Text style={[styles.title, { color: colors.textPrimary }]}>
+          {title}
+        </Text>
+        {subtitle ? (
+          <Text style={[styles.subtitle, { color: colors.textMuted }]}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
 
-      <View style={styles.chartWrap}>
+      {data.length === 0 ? (
+        <Text style={[styles.empty, { color: colors.textMuted }]}>
+          Sin datos disponibles
+        </Text>
+      ) : (
         <BarChart
           data={chartData}
-          width={chartWidth}
           height={height}
-          barWidth={dataFinal.length > 8 ? 14 : 22}
-          initialSpacing={10}
-          spacing={dataFinal.length > 8 ? 6 : 12}
-          barBorderRadius={4}
+          barWidth={Math.max(8, Math.min(24, 220 / data.length))}
+          barBorderTopLeftRadius={4}
+          barBorderTopRightRadius={4}
+          initialSpacing={4}
+          endSpacing={4}
+          spacing={6}
+          backgroundColor="transparent"
           yAxisColor={colors.border}
           xAxisColor={colors.border}
-          yAxisTextStyle={styles.axisText}
-          xAxisLabelTextStyle={styles.axisText}
           rulesColor={colors.border}
-          rulesType="solid"
-          noOfSections={3}
-          maxValue={maxValue * 1.2}
-          formatYLabel={(v) => {
-            const n = parseFloat(v);
-            if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
-            if (n >= 1000) return `${(n / 1000).toFixed(0)}k`;
-            return String(Math.round(n));
+          rulesType="dashed"
+          yAxisTextStyle={{
+            color: colors.textMuted,
+            fontSize: 10,
           }}
+          xAxisLabelTextStyle={{
+            color: colors.textMuted,
+            fontSize: 10,
+          }}
+          formatYLabel={(value) => {
+            const numeric = parseFloat(value);
+            if (formatValue) return formatValue(numeric);
+            if (numeric >= 1000) return `${(numeric / 1000).toFixed(0)}k`;
+            return String(Math.round(numeric));
+          }}
+          noOfSections={4}
         />
-      </View>
-    </Card>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  card: { marginBottom: spacing.md },
-  title: { ...typography.h3, color: colors.textPrimary },
+  card: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    padding: spacing.lg,
+  },
+  header: { marginBottom: spacing.lg },
+  title: { ...typography.h3 },
   subtitle: {
     ...typography.small,
-    color: colors.textMuted,
     marginTop: 2,
-    marginBottom: spacing.md,
-  },
-  chartWrap: {
-    marginTop: spacing.md,
-    marginLeft: -spacing.md,
-  },
-  axisText: {
-    color: colors.textMuted,
-    fontSize: 10,
-  },
-  barLabel: {
-    fontSize: 9,
-    color: colors.textMuted,
-    marginBottom: 2,
   },
   empty: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.bgSubtle,
-    borderRadius: radius.md,
-    marginTop: spacing.md,
+    ...typography.caption,
+    textAlign: 'center',
+    paddingVertical: spacing.xxl,
   },
-  emptyText: { ...typography.caption, color: colors.textMuted },
 });

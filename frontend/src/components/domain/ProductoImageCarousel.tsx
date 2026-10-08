@@ -10,7 +10,8 @@ import {
 } from 'react-native';
 import { Image } from 'expo-image';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 import { getImageUrl } from '@utils/image';
 
 interface ProductoImageCarouselProps {
@@ -24,12 +25,15 @@ export default function ProductoImageCarousel({
   height,
   onRemove,
 }: ProductoImageCarouselProps): React.ReactElement {
+  const colors = useColors();
   const scrollRef = useRef<ScrollView>(null);
   const [width, setWidth] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
   const visibleIndex = Math.min(activeIndex, Math.max(images.length - 1, 0));
 
-  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>): void => {
+  const handleScroll = (
+    event: NativeSyntheticEvent<NativeScrollEvent>,
+  ): void => {
     if (width > 0) {
       setActiveIndex(Math.round(event.nativeEvent.contentOffset.x / width));
     }
@@ -41,9 +45,16 @@ export default function ProductoImageCarousel({
 
   return (
     <View
-      style={[styles.container, { height }]}
+      style={[
+        styles.container,
+        { height, backgroundColor: colors.bgSubtle },
+      ]}
       onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-      accessibilityLabel={images.length > 1 ? `Galería, ${images.length} fotos` : 'Foto del producto'}
+      accessibilityLabel={
+        images.length > 1
+          ? `Galería, ${images.length} fotos`
+          : 'Foto del producto'
+      }
     >
       {images.length === 0 ? (
         <View style={styles.empty}>
@@ -52,8 +63,12 @@ export default function ProductoImageCarousel({
             size={32}
             color={colors.textMuted}
           />
-          <Text style={styles.emptyTitle}>Foto del producto</Text>
-          <Text style={styles.emptyHint}>Añade una o varias imágenes</Text>
+          <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
+            Foto del producto
+          </Text>
+          <Text style={[styles.emptyHint, { color: colors.textMuted }]}>
+            Añade una o varias imágenes
+          </Text>
         </View>
       ) : (
         <>
@@ -69,7 +84,10 @@ export default function ProductoImageCarousel({
             {images.map((path, index) => {
               const uri = getImageUrl(path);
               return (
-                <View key={`${path}-${index}`} style={[styles.page, { width, height }]}>
+                <View
+                  key={`${path}-${index}`}
+                  style={[styles.page, { width, height }]}
+                >
                   {uri ? (
                     <Image
                       source={{ uri }}
@@ -86,18 +104,27 @@ export default function ProductoImageCarousel({
 
           {images.length > 1 ? (
             <View style={styles.counter} pointerEvents="none">
-              <Text style={styles.counterText}>{visibleIndex + 1} / {images.length}</Text>
+              <Text style={[styles.counterText, { color: '#FFFFFF' }]}>
+                {visibleIndex + 1} / {images.length}
+              </Text>
             </View>
           ) : null}
 
           {onRemove ? (
             <Pressable
               onPress={() => onRemove(visibleIndex)}
-              style={styles.removeButton}
+              style={[
+                styles.removeButton,
+                { backgroundColor: colors.danger },
+              ]}
               accessibilityRole="button"
               accessibilityLabel="Quitar esta foto"
             >
-              <MaterialCommunityIcons name="close" size={18} color={colors.textInverse} />
+              <MaterialCommunityIcons
+                name="close"
+                size={18}
+                color="#FFFFFF"
+              />
             </Pressable>
           ) : null}
 
@@ -109,7 +136,16 @@ export default function ProductoImageCarousel({
                   onPress={() => goTo(index)}
                   accessibilityRole="button"
                   accessibilityLabel={`Ver foto ${index + 1}`}
-                  style={[styles.dot, index === visibleIndex ? styles.activeDot : null]}
+                  style={[
+                    styles.dot,
+                    { backgroundColor: colors.bgMuted },
+                    index === visibleIndex
+                      ? [
+                          styles.activeDot,
+                          { backgroundColor: colors.primary },
+                        ]
+                      : null,
+                  ]}
                 />
               ))}
             </View>
@@ -128,11 +164,15 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     overflow: 'hidden',
     borderRadius: radius.md,
-    backgroundColor: colors.bgSubtle,
   },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.xs },
-  emptyTitle: { ...typography.bodyBold, color: colors.textPrimary },
-  emptyHint: { ...typography.small, color: colors.textMuted },
+  empty: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+  },
+  emptyTitle: { ...typography.bodyBold },
+  emptyHint: { ...typography.small },
   page: { alignItems: 'center', justifyContent: 'center' },
   scrollView: { width: '100%' },
   image: { width: '100%', height: '100%' },
@@ -145,7 +185,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.sm,
     backgroundColor: 'rgba(17, 24, 39, 0.72)',
   },
-  counterText: { ...typography.small, color: colors.textInverse },
+  counterText: { ...typography.small },
   removeButton: {
     position: 'absolute',
     right: spacing.sm,
@@ -155,7 +195,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.danger,
   },
   dots: {
     position: 'absolute',
@@ -164,6 +203,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.xs,
   },
-  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.bgMuted },
-  activeDot: { width: 18, backgroundColor: colors.primary },
+  dot: { width: 8, height: 8, borderRadius: 4 },
+  activeDot: { width: 18 },
 });

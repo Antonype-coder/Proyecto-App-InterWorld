@@ -1,6 +1,9 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle, Pressable } from 'react-native';
-import { colors, radius, spacing, shadows } from '@theme/index';
+import { View, StyleSheet, ViewStyle, Pressable, Animated } from 'react-native';
+import { radius, spacing, shadows } from '@theme/index';
+import { useColors } from '@hooks/useColors';
+import { usePressAnimation } from '@hooks/usePressAnimation';
+import type { AppColors } from '@theme/index';
 
 interface CardProps {
   children: React.ReactNode;
@@ -19,7 +22,9 @@ export default function Card({
   style,
   accessibilityLabel,
 }: CardProps): React.ReactElement {
-  const variantStyle = getVariantStyle(variant);
+  const colors = useColors();
+  const variantStyle = getVariantStyle(variant, colors);
+  const press = usePressAnimation({ enable: !!onPress });
 
   const content = (
     <View style={[styles.base, variantStyle, { padding }, style]}>
@@ -29,14 +34,17 @@ export default function Card({
 
   if (onPress) {
     return (
-      <Pressable
-        onPress={onPress}
-        accessibilityRole="button"
-        accessibilityLabel={accessibilityLabel}
-        style={({ pressed }) => (pressed ? styles.pressed : null)}
-      >
-        {content}
-      </Pressable>
+      <Animated.View style={press.style}>
+        <Pressable
+          onPress={onPress}
+          onPressIn={press.onPressIn}
+          onPressOut={press.onPressOut}
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel}
+        >
+          {content}
+        </Pressable>
+      </Animated.View>
     );
   }
 
@@ -45,6 +53,7 @@ export default function Card({
 
 function getVariantStyle(
   variant: 'default' | 'flat' | 'elevated' | 'ghost',
+  colors: AppColors,
 ): ViewStyle {
   switch (variant) {
     case 'flat':
@@ -68,5 +77,4 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     overflow: 'hidden',
   },
-  pressed: { opacity: 0.7 },
 });

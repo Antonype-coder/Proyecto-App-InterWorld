@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import { colors, spacing, typography } from '@theme/index';
+import { spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 import Badge from '../ui/Badge';
 import { formatCurrency, formatDateTime } from '@utils/format';
 import type { VentaResumen } from '@tipos/index';
@@ -14,27 +15,51 @@ export default function VentaItem({
   venta,
   onPress,
 }: VentaItemProps): React.ReactElement {
+  const colors = useColors();
   const anulada = venta.estado === 'anulada';
 
   return (
     <Pressable
       onPress={onPress}
-      style={({ pressed }) => [styles.container, pressed ? styles.pressed : null]}
+      style={({ pressed }) => [
+        styles.container,
+        {
+          backgroundColor: colors.surface,
+          borderBottomColor: colors.border,
+        },
+        pressed ? { backgroundColor: colors.surfacePressed } : null,
+      ]}
       accessibilityRole="button"
       accessibilityLabel={`Venta ${venta.numero}`}
     >
       <View style={styles.left}>
-        <Text style={styles.numero} numberOfLines={1}>
+        <Text
+          style={[styles.numero, { color: colors.textPrimary }]}
+          numberOfLines={1}
+        >
           {venta.numero}
         </Text>
-        <Text style={styles.cliente} numberOfLines={1}>
+        <Text
+          style={[styles.cliente, { color: colors.textSecondary }]}
+          numberOfLines={1}
+        >
           {venta.cliente_nombre ?? 'Consumidor final'}
         </Text>
-        <Text style={styles.fecha}>{formatDateTime(venta.created_at)}</Text>
+        <Text style={[styles.fecha, { color: colors.textMuted }]}>
+          {formatDateTime(venta.created_at)}
+        </Text>
       </View>
 
       <View style={styles.right}>
-        <Text style={[styles.total, anulada ? styles.totalAnulada : null]}>
+        <Text
+          style={[
+            styles.total,
+            {
+              color: anulada ? colors.textMuted : colors.textPrimary,
+              textDecorationLine: anulada ? 'line-through' : 'none',
+            },
+          ]}
+        >
           {formatCurrency(venta.total)}
         </Text>
         <View style={styles.badges}>
@@ -57,22 +82,15 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
-  pressed: { backgroundColor: colors.surfacePressed },
   left: { flex: 1, marginRight: spacing.md },
-  numero: { ...typography.bodyBold, color: colors.textPrimary },
-  cliente: { ...typography.caption, color: colors.textSecondary, marginTop: 2 },
-  fecha: { ...typography.small, color: colors.textMuted, marginTop: 2 },
+  numero: { ...typography.bodyBold },
+  cliente: { ...typography.caption, marginTop: 2 },
+  fecha: { ...typography.small, marginTop: 2 },
   right: { alignItems: 'flex-end', gap: spacing.xs },
-  total: { ...typography.bodyBold, color: colors.textPrimary },
-  totalAnulada: {
-    color: colors.textMuted,
-    textDecorationLine: 'line-through',
-  },
+  total: { ...typography.bodyBold },
   badges: { flexDirection: 'row', gap: spacing.xs },
 });

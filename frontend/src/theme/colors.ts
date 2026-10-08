@@ -1,4 +1,81 @@
-export const colors = {
+export interface AppColors {
+  // Fondos
+  bg: string;
+  bgSubtle: string;
+  bgMuted: string;
+
+  // Superficies
+  surface: string;
+  surfaceHover: string;
+  surfacePressed: string;
+
+  // Bordes
+  border: string;
+  borderStrong: string;
+  borderFocus: string;
+
+  // Texto
+  textPrimary: string;
+  textSecondary: string;
+  textMuted: string;
+  textDisabled: string;
+  textInverse: string;
+
+  // Marca
+  primary: string;
+  primaryHover: string;
+  primaryPressed: string;
+  primarySubtle: string;
+
+  // Acento
+  accent: string;
+  accentHover: string;
+  accentSubtle: string;
+  accentText: string;
+
+  // Paleta de datos
+  chartPrimary: string;
+  chartWine: string;
+  chartPlum: string;
+  chartBerry: string;
+  chartMauve: string;
+  chartSmoke: string;
+  chartCocoa: string;
+
+  chartPrimarySubtle: string;
+  chartWineSubtle: string;
+  chartPlumSubtle: string;
+  chartBerrySubtle: string;
+  chartMauveSubtle: string;
+  chartSmokeSubtle: string;
+  chartCocoaSubtle: string;
+
+  // Semánticos
+  success: string;
+  successSubtle: string;
+  successText: string;
+
+  warning: string;
+  warningSubtle: string;
+  warningText: string;
+
+  danger: string;
+  dangerSubtle: string;
+  dangerText: string;
+
+  info: string;
+  infoSubtle: string;
+  infoText: string;
+
+  // Overlay
+  overlay: string;
+  overlayLight: string;
+
+  // Sombras
+  shadowColor: string;
+}
+
+export const colors: AppColors = {
   // Fondos
   bg:            '#F9FAFB',
   bgSubtle:      '#F3F4F6',
@@ -28,27 +105,47 @@ export const colors = {
   primarySubtle:  '#F3F4F6',
 
   // Acento
-  accent:       '#4F46E5',
-  accentHover:  '#4338CA',
-  accentSubtle: '#EEF2FF',
-  accentText:   '#3730A3',
+  accent:       '#111827',
+  accentHover:  '#1F2937',
+  accentSubtle: '#F3F4F6',
+  accentText:   '#111827',
 
-  // Éxito
+  // ============================================================
+  // PALETA DE DATOS — "joyas oscuras"
+  // Basada en: #2C2C2C grafito, #853953 vino, #612D53 ciruela
+  // ============================================================
+
+  chartPrimary: '#2C2C2C',
+  chartWine:    '#853953',
+  chartPlum:    '#612D53',
+  chartBerry:   '#A14B6B',
+  chartMauve:   '#8B4A7C',
+  chartSmoke:   '#F3F4F4',
+  chartCocoa:   '#4A3538',
+
+  chartPrimarySubtle: '#F3F4F4',
+  chartWineSubtle:    '#FBF0F3',
+  chartPlumSubtle:    '#F5EDF3',
+  chartBerrySubtle:   '#FAEEF1',
+  chartMauveSubtle:   '#F5EEF3',
+  chartSmokeSubtle:   '#F9FAFB',
+  chartCocoaSubtle:   '#F2EEEF',
+
+  // ============================================================
+  // SEMÁNTICOS
+  // ============================================================
   success:       '#059669',
   successSubtle: '#ECFDF5',
   successText:   '#065F46',
 
-  // Advertencia
   warning:       '#D97706',
   warningSubtle: '#FFFBEB',
   warningText:   '#92400E',
 
-  // Peligro
-  danger:       '#DC2626',
-  dangerSubtle: '#FEF2F2',
-  dangerText:   '#991B1B',
+  danger:       '#BE123C',
+  dangerSubtle: '#FFF1F2',
+  dangerText:   '#881337',
 
-  // Info
   info:       '#0284C7',
   infoSubtle: '#F0F9FF',
   infoText:   '#075985',
@@ -59,6 +156,4 @@ export const colors = {
 
   // Sombras
   shadowColor: '#000000',
-} as const;
-
-export type AppColors = typeof colors;
+};

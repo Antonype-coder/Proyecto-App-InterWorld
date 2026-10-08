@@ -1,4 +1,3 @@
-// src/screens/productos/ProductoFormScreen.tsx
 import React, { useEffect, useState } from 'react';
 import {
   View,
@@ -19,7 +18,9 @@ import {
 } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 
-import { colors, spacing, typography, radius } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
+import { useSuccessPulse } from '@hooks/useSuccessPulse';
 import { productoSchema, type ProductoFormData } from '@utils/validators';
 import {
   productosApi,
@@ -41,8 +42,9 @@ import FormInput from '@components/forms/FormInput';
 import FormNumberInput from '@components/forms/FormNumberInput';
 import FormSearchPicker from '@components/forms/FormSearchPicker';
 import ProductoImageCarousel from '@components/domain/ProductoImageCarousel';
+import { SuccessPulse } from '@components/feedback';
+import ErrorState from '@components/feedback/ErrorState';
 import type { ToastVariant } from '@tipos/index';
-import { getImageUrl } from '@utils/image';
 
 type Params = RouteProp<ProductosStackParamList, 'ProductoForm'>;
 
@@ -56,9 +58,11 @@ export default function ProductoFormScreen(): React.ReactElement {
   const route = useRoute<Params>();
   const productId = route.params?.productId;
   const editando = typeof productId === 'number';
+  const colors = useColors();
 
   const [loading, setLoading] = useState(editando);
   const [saving, setSaving] = useState(false);
+  const [pulseVisible, triggerPulse] = useSuccessPulse();
   const [activo, setActivo] = useState(true);
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
@@ -79,12 +83,7 @@ export default function ProductoFormScreen(): React.ReactElement {
     variant: ToastVariant;
   }>({ visible: false, message: '', variant: 'info' });
 
-  const {
-    control,
-    handleSubmit,
-    reset,
-    setValue,
-  } = useForm<ProductoFormData>({
+  const { control, handleSubmit, reset, setValue } = useForm<ProductoFormData>({
     resolver: zodResolver(productoSchema) as never,
     defaultValues: {
       codigo_barras: '',
@@ -99,7 +98,6 @@ export default function ProductoFormScreen(): React.ReactElement {
     },
   });
 
-  // Carga inicial: categorías, proveedores y producto (si editamos)
   useEffect(() => {
     (async () => {
       try {
@@ -117,7 +115,9 @@ export default function ProductoFormScreen(): React.ReactElement {
             : p.imagen
               ? [p.imagen]
               : [];
+
           setFotos(imagenes.map((path) => ({ path })));
+
           reset({
             codigo_barras: p.codigo_barras,
             nombre: p.nombre,
@@ -129,39 +129,53 @@ export default function ProductoFormScreen(): React.ReactElement {
             stock: p.stock,
             stock_minimo: p.stock_minimo,
           });
+
           setActivo(p.activo === 1);
         }
       } catch (e) {
         const msg = e instanceof Error ? e.message : 'Error al cargar';
-        setToast({ visible: true, message: msg, variant: 'error' });
+        setToast({
+          visible: true,
+          message: msg,
+          variant: 'error',
+        });
       } finally {
         setLoading(false);
       }
     })();
   }, [editando, productId, reset]);
 
-  // Escuchar cuando volvemos del escáner con un código
   useFocusEffect(
     React.useCallback(() => {
       const codigoEscaneado = route.params?.codigoEscaneado;
+
       if (codigoEscaneado) {
         const normalized = String(codigoEscaneado).trim();
-        setValue('codigo_barras', normalized, { shouldValidate: true });
+
+        setValue('codigo_barras', normalized, {
+          shouldValidate: true,
+        });
 
         (async () => {
           try {
             let productoLocal = null;
+
             try {
-              productoLocal = await productosApi.buscarPorCodigo(normalized);
+              productoLocal =
+                await productosApi.buscarPorCodigo(normalized);
             } catch {
               productoLocal = null;
             }
 
             if (productoLocal && productoLocal.id !== productId) {
-              navigation.setParams({ codigoEscaneado: undefined });
+              navigation.setParams({
+                codigoEscaneado: undefined,
+              });
+
               navigation.navigate('ProductoDetalle', {
                 productId: productoLocal.id,
               });
+
               return;
             }
 
@@ -171,28 +185,47 @@ export default function ProductoFormScreen(): React.ReactElement {
                 : productoLocal.imagen
                   ? [productoLocal.imagen]
                   : [];
+
               if (fotos.length === 0 && imagenes.length > 0) {
                 setFotos(imagenes.map((path) => ({ path })));
               }
+
               setToast({
                 visible: true,
                 message: 'Fotos cargadas desde este producto.',
                 variant: 'success',
               });
+
               return;
             }
 
-            const resultadoCatalogo = await buscarEnCatalogosPublicos(normalized);
-            const productoEncontrado = resultadoCatalogo?.producto ?? null;
+            const resultadoCatalogo =
+              await buscarEnCatalogosPublicos(normalized);
+
+            const productoEncontrado =
+              resultadoCatalogo?.producto ?? null;
 
             if (resultadoCatalogo && productoEncontrado) {
-              const nombre = productoEncontrado.product_name ?? '';
-              const descripcion = productoEncontrado.ingredients_text ?? '';
-              const imagen = productoEncontrado.image_front_url ?? productoEncontrado.image_url;
+              const nombre =
+                productoEncontrado.product_name ?? '';
 
-              if (nombre) setValue('nombre', nombre, { shouldValidate: true });
+              const descripcion =
+                productoEncontrado.ingredients_text ?? '';
+
+              const imagen =
+                productoEncontrado.image_front_url ??
+                productoEncontrado.image_url;
+
+              if (nombre) {
+                setValue('nombre', nombre, {
+                  shouldValidate: true,
+                });
+              }
+
               if (descripcion) {
-                setValue('descripcion', descripcion, { shouldValidate: true });
+                setValue('descripcion', descripcion, {
+                  shouldValidate: true,
+                });
               }
 
               if (imagen && fotos.length === 0) {
@@ -201,7 +234,9 @@ export default function ProductoFormScreen(): React.ReactElement {
 
               setToast({
                 visible: true,
-                message: `Producto detectado en ${catalogoPublicoLabel[resultadoCatalogo.source]}: ${nombre || 'código encontrado'}`,
+                message: `Producto detectado en ${catalogoPublicoLabel[resultadoCatalogo.source]}: ${
+                  nombre || 'código encontrado'
+                }`,
                 variant: 'success',
               });
             } else {
@@ -220,33 +255,53 @@ export default function ProductoFormScreen(): React.ReactElement {
           }
         })();
 
-        navigation.setParams({ codigoEscaneado: undefined });
+        navigation.setParams({
+          codigoEscaneado: undefined,
+        });
       }
-    }, [route.params?.codigoEscaneado, setValue, navigation, fotos.length]),
+    }, [
+      route.params?.codigoEscaneado,
+      setValue,
+      navigation,
+      fotos.length,
+    ]),
   );
 
   const abrirScanner = (): void => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    navigation.navigate('ProductoScanner', { origen: 'formulario' });
+    Haptics.impactAsync(
+      Haptics.ImpactFeedbackStyle.Medium,
+    );
+
+    navigation.navigate('ProductoScanner', {
+      origen: 'formulario',
+    });
   };
 
-  const guardarFotos = (assets: ImagePicker.ImagePickerAsset[]): void => {
+  const guardarFotos = (
+    assets: ImagePicker.ImagePickerAsset[],
+  ): void => {
     setFotos((current) => {
       const restantes = Math.max(0, 8 - current.length);
-      const nuevas = assets.slice(0, restantes).map((asset) => {
-        const type = asset.mimeType ?? 'image/jpeg';
-        const extension = type.split('/')[1] ?? 'jpg';
-        return {
-          path: asset.uri,
-          file: {
-            uri: asset.uri,
-            name:
-              asset.fileName ??
-              `producto-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`,
-            type,
-          },
-        };
-      });
+
+      const nuevas = assets
+        .slice(0, restantes)
+        .map((asset) => {
+          const type = asset.mimeType ?? 'image/jpeg';
+          const extension = type.split('/')[1] ?? 'jpg';
+
+          return {
+            path: asset.uri,
+            file: {
+              uri: asset.uri,
+              name:
+                asset.fileName ??
+                `producto-${Date.now()}-${Math.random()
+                  .toString(36)
+                  .slice(2, 8)}.${extension}`,
+              type,
+            },
+          };
+        });
 
       if (assets.length > restantes) {
         setToast({
@@ -255,61 +310,100 @@ export default function ProductoFormScreen(): React.ReactElement {
           variant: 'warning',
         });
       }
+
       return [...current, ...nuevas];
     });
   };
 
   const seleccionarFoto = async (): Promise<void> => {
     const disponibles = 8 - fotos.length;
+
     if (disponibles <= 0) {
-      setToast({ visible: true, message: 'Cada producto puede tener hasta 8 fotos.', variant: 'warning' });
+      setToast({
+        visible: true,
+        message: 'Cada producto puede tener hasta 8 fotos.',
+        variant: 'warning',
+      });
       return;
     }
+
     try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsMultipleSelection: true,
-        selectionLimit: disponibles,
-        quality: 0.8,
-      });
+      const result =
+        await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          allowsMultipleSelection: true,
+          selectionLimit: disponibles,
+          quality: 0.8,
+        });
+
       if (result.canceled) return;
+
       guardarFotos(result.assets);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'No se pudo abrir la galería';
-      setToast({ visible: true, message: msg, variant: 'error' });
+      const msg =
+        e instanceof Error
+          ? e.message
+          : 'No se pudo abrir la galería';
+
+      setToast({
+        visible: true,
+        message: msg,
+        variant: 'error',
+      });
     }
   };
 
   const tomarFoto = async (): Promise<void> => {
     if (fotos.length >= 8) {
-      setToast({ visible: true, message: 'Cada producto puede tener hasta 8 fotos.', variant: 'warning' });
+      setToast({
+        visible: true,
+        message: 'Cada producto puede tener hasta 8 fotos.',
+        variant: 'warning',
+      });
       return;
     }
+
     try {
-      const permission = await ImagePicker.requestCameraPermissionsAsync();
+      const permission =
+        await ImagePicker.requestCameraPermissionsAsync();
+
       if (!permission.granted) {
         setToast({
           visible: true,
-          message: 'Permite el acceso a la cámara para tomar la foto.',
+          message:
+            'Permite el acceso a la cámara para tomar la foto.',
           variant: 'error',
         });
         return;
       }
 
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-      if (!result.canceled) guardarFotos(result.assets);
+      const result =
+        await ImagePicker.launchCameraAsync({
+          allowsEditing: true,
+          aspect: [1, 1],
+          quality: 0.8,
+        });
+
+      if (!result.canceled) {
+        guardarFotos(result.assets);
+      }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'No se pudo abrir la cámara';
-      setToast({ visible: true, message: msg, variant: 'error' });
+      const msg =
+        e instanceof Error
+          ? e.message
+          : 'No se pudo abrir la cámara';
+
+      setToast({
+        visible: true,
+        message: msg,
+        variant: 'error',
+      });
     }
   };
 
   const crearCategoria = async (): Promise<void> => {
     const nombre = categoriaNombre.trim();
+
     if (nombre.length < 2) {
       setToast({
         visible: true,
@@ -320,25 +414,44 @@ export default function ProductoFormScreen(): React.ReactElement {
     }
 
     setSavingCategoria(true);
+
     try {
       const categoria = await categoriasApi.crear({
         nombre,
-        descripcion: categoriaDescripcion.trim() || undefined,
+        descripcion:
+          categoriaDescripcion.trim() || undefined,
         activo: 1,
       });
-      setCategorias((current) => [...current, categoria]);
-      setValue('categoria_id', categoria.id, { shouldDirty: true });
+
+      setCategorias((current) => [
+        ...current,
+        categoria,
+      ]);
+
+      setValue('categoria_id', categoria.id, {
+        shouldDirty: true,
+      });
+
       setCategoriaNombre('');
       setCategoriaDescripcion('');
       setModalCategoriaVisible(false);
+
       setToast({
         visible: true,
         message: 'Categoría agregada y seleccionada.',
         variant: 'success',
       });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'No se pudo agregar la categoría';
-      setToast({ visible: true, message: msg, variant: 'error' });
+      const msg =
+        e instanceof Error
+          ? e.message
+          : 'No se pudo agregar la categoría';
+
+      setToast({
+        visible: true,
+        message: msg,
+        variant: 'error',
+      });
     } finally {
       setSavingCategoria(false);
     }
@@ -346,6 +459,7 @@ export default function ProductoFormScreen(): React.ReactElement {
 
   const crearProveedor = async (): Promise<void> => {
     const nombre = proveedorNombre.trim();
+
     if (nombre.length < 2) {
       setToast({
         visible: true,
@@ -356,63 +470,108 @@ export default function ProductoFormScreen(): React.ReactElement {
     }
 
     setSavingProveedor(true);
+
     try {
       const proveedor = await proveedoresApi.crear({
         nombre,
-        contacto: proveedorContacto.trim() || undefined,
-        telefono: proveedorTelefono.trim() || undefined,
-        email: proveedorEmail.trim() || undefined,
+        contacto:
+          proveedorContacto.trim() || undefined,
+        telefono:
+          proveedorTelefono.trim() || undefined,
+        email:
+          proveedorEmail.trim() || undefined,
       });
-      setProveedores((current) => [...current, proveedor]);
-      setValue('proveedor_id', proveedor.id, { shouldDirty: true });
+
+      setProveedores((current) => [
+        ...current,
+        proveedor,
+      ]);
+
+      setValue('proveedor_id', proveedor.id, {
+        shouldDirty: true,
+      });
+
       setProveedorNombre('');
       setProveedorContacto('');
       setProveedorTelefono('');
       setProveedorEmail('');
       setModalProveedorVisible(false);
+
       setToast({
         visible: true,
         message: 'Proveedor agregado y seleccionado.',
         variant: 'success',
       });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'No se pudo agregar el proveedor';
-      setToast({ visible: true, message: msg, variant: 'error' });
+      const msg =
+        e instanceof Error
+          ? e.message
+          : 'No se pudo agregar el proveedor';
+
+      setToast({
+        visible: true,
+        message: msg,
+        variant: 'error',
+      });
     } finally {
       setSavingProveedor(false);
     }
   };
 
-  const onSubmit = async (data: ProductoFormData): Promise<void> => {
+  const onSubmit = async (
+    data: ProductoFormData,
+  ): Promise<void> => {
     setSaving(true);
+
     try {
       const imagenesGuardadas: string[] = [];
+
       for (const foto of fotos) {
         if (foto.file) {
-          imagenesGuardadas.push((await uploadsApi.imagenProducto(foto.file)).path);
+          imagenesGuardadas.push(
+            (
+              await uploadsApi.imagenProducto(
+                foto.file,
+              )
+            ).path,
+          );
         } else if (/^https?:\/\//i.test(foto.path)) {
-          imagenesGuardadas.push((await uploadsApi.imagenProductoDesdeUrl(foto.path)).path);
+          imagenesGuardadas.push(
+            (
+              await uploadsApi.imagenProductoDesdeUrl(
+                foto.path,
+              )
+            ).path,
+          );
         } else {
           imagenesGuardadas.push(foto.path);
         }
       }
+
       const payload = {
         codigo_barras: data.codigo_barras.trim(),
         nombre: data.nombre.trim(),
-        descripcion: data.descripcion?.trim() || undefined,
+        descripcion:
+          data.descripcion?.trim() || undefined,
         categoria_id: data.categoria_id ?? null,
         proveedor_id: data.proveedor_id ?? null,
-        precio_compra: Number(data.precio_compra) || 0,
-        precio_venta: Number(data.precio_venta) || 0,
+        precio_compra:
+          Number(data.precio_compra) || 0,
+        precio_venta:
+          Number(data.precio_venta) || 0,
         stock: Number(data.stock) || 0,
-        stock_minimo: Number(data.stock_minimo) || 0,
+        stock_minimo:
+          Number(data.stock_minimo) || 0,
         imagen: imagenesGuardadas[0] ?? null,
         imagenes: imagenesGuardadas,
         activo: activo ? 1 : 0,
       };
 
       if (editando && productId) {
-        await productosApi.actualizar(productId, payload);
+        await productosApi.actualizar(
+          productId,
+          payload,
+        );
       } else {
         await productosApi.crear(payload);
       }
@@ -420,11 +579,23 @@ export default function ProductoFormScreen(): React.ReactElement {
       await Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
       );
-      navigation.goBack();
+
+      triggerPulse();
+
+      setTimeout(() => navigation.goBack(), 700);
     } catch (e) {
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const msg = e instanceof Error ? e.message : 'Error al guardar';
-      setToast({ visible: true, message: msg, variant: 'error' });
+      await Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Error,
+      );
+
+      const msg =
+        e instanceof Error ? e.message : 'Error al guardar';
+
+      setToast({
+        visible: true,
+        message: msg,
+        variant: 'error',
+      });
     } finally {
       setSaving(false);
     }
@@ -434,19 +605,29 @@ export default function ProductoFormScreen(): React.ReactElement {
     <KeyboardScreen
       header={
         <TopBar
-          title={editando ? 'Editar producto' : 'Nuevo producto'}
+          title={
+            editando ? 'Editar producto' : 'Nuevo producto'
+          }
           onBack={() => navigation.goBack()}
         />
       }
       contentContainerStyle={{ padding: 0 }}
     >
       <View style={styles.content}>
-        <Card variant="default" style={styles.imageCard}>
+        <Card
+          variant="default"
+          style={styles.imageCard}
+        >
           <ProductoImageCarousel
             images={fotos.map((foto) => foto.path)}
             height={190}
-            onRemove={(index) => setFotos((current) => current.filter((_, i) => i !== index))}
+            onRemove={(index) =>
+              setFotos((current) =>
+                current.filter((_, i) => i !== index),
+              )
+            }
           />
+
           <View style={styles.imageActions}>
             <Button
               label="Tomar foto"
@@ -458,8 +639,13 @@ export default function ProductoFormScreen(): React.ReactElement {
               disabled={fotos.length >= 8}
               style={styles.imageAction}
             />
+
             <Button
-              label={fotos.length > 0 ? 'Agregar fotos' : 'Elegir fotos'}
+              label={
+                fotos.length > 0
+                  ? 'Agregar fotos'
+                  : 'Elegir fotos'
+              }
               icon="image-outline"
               variant="outline"
               onPress={() => {
@@ -471,10 +657,19 @@ export default function ProductoFormScreen(): React.ReactElement {
           </View>
         </Card>
 
-        <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Información básica</Text>
+        <Card
+          variant="default"
+          style={styles.section}
+        >
+          <Text
+            style={[
+              styles.sectionTitle,
+              { color: colors.textPrimary },
+            ]}
+          >
+            Información básica
+          </Text>
 
-          {/* Campo de código de barras con botón de escáner */}
           <View style={styles.codigoWrapper}>
             <View style={{ flex: 1 }}>
               <FormInput
@@ -485,9 +680,16 @@ export default function ProductoFormScreen(): React.ReactElement {
                 required
               />
             </View>
+
             <Pressable
               onPress={abrirScanner}
-              style={styles.scanBtn}
+              style={[
+                styles.scanBtn,
+                {
+                  backgroundColor:
+                    colors.primary,
+                },
+              ]}
               accessibilityLabel="Escanear código de barras"
             >
               <MaterialCommunityIcons
@@ -505,6 +707,7 @@ export default function ProductoFormScreen(): React.ReactElement {
             icon="package-variant"
             required
           />
+
           <FormInput
             control={control}
             name="descripcion"
@@ -514,14 +717,26 @@ export default function ProductoFormScreen(): React.ReactElement {
           />
         </Card>
 
-        <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Precios</Text>
+        <Card
+          variant="default"
+          style={styles.section}
+        >
+          <Text
+            style={[
+              styles.sectionTitle,
+              { color: colors.textPrimary },
+            ]}
+          >
+            Precios
+          </Text>
+
           <FormNumberInput
             control={control}
             name="precio_compra"
             label="Precio de compra"
             icon="currency-usd"
           />
+
           <FormNumberInput
             control={control}
             name="precio_venta"
@@ -532,8 +747,19 @@ export default function ProductoFormScreen(): React.ReactElement {
         </Card>
 
         {!editando ? (
-          <Card variant="default" style={styles.section}>
-            <Text style={styles.sectionTitle}>Stock</Text>
+          <Card
+            variant="default"
+            style={styles.section}
+          >
+            <Text
+              style={[
+                styles.sectionTitle,
+                { color: colors.textPrimary },
+              ]}
+            >
+              Stock
+            </Text>
+
             <FormNumberInput
               control={control}
               name="stock"
@@ -541,6 +767,7 @@ export default function ProductoFormScreen(): React.ReactElement {
               icon="archive-outline"
               integer
             />
+
             <FormNumberInput
               control={control}
               name="stock_minimo"
@@ -551,8 +778,19 @@ export default function ProductoFormScreen(): React.ReactElement {
             />
           </Card>
         ) : (
-          <Card variant="default" style={styles.section}>
-            <Text style={styles.sectionTitle}>Stock</Text>
+          <Card
+            variant="default"
+            style={styles.section}
+          >
+            <Text
+              style={[
+                styles.sectionTitle,
+                { color: colors.textPrimary },
+              ]}
+            >
+              Stock
+            </Text>
+
             <FormNumberInput
               control={control}
               name="stock_minimo"
@@ -564,62 +802,115 @@ export default function ProductoFormScreen(): React.ReactElement {
           </Card>
         )}
 
-        <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Clasificación</Text>
+        <Card
+          variant="default"
+          style={styles.section}
+        >
+          <Text
+            style={[
+              styles.sectionTitle,
+              { color: colors.textPrimary },
+            ]}
+          >
+            Clasificación
+          </Text>
+
           <FormSearchPicker
             control={control}
             name="categoria_id"
             label="Categoría"
             placeholder="Sin categoría"
             icon="shape-outline"
-            options={categorias.map((c) => ({ id: c.id, nombre: c.nombre }))}
+            options={categorias.map((c) => ({
+              id: c.id,
+              nombre: c.nombre,
+            }))}
           />
+
           <Button
             label="Agregar categoría"
             icon="plus-box-outline"
             variant="ghost"
             size="sm"
-            onPress={() => setModalCategoriaVisible(true)}
+            onPress={() =>
+              setModalCategoriaVisible(true)
+            }
             style={styles.addSupplierButton}
           />
+
           <FormSearchPicker
             control={control}
             name="proveedor_id"
             label="Proveedor"
             placeholder="Sin proveedor"
             icon="truck-outline"
-            options={proveedores.map((p) => ({ id: p.id, nombre: p.nombre }))}
+            options={proveedores.map((p) => ({
+              id: p.id,
+              nombre: p.nombre,
+            }))}
           />
+
           <Button
             label="Agregar proveedor"
             icon="account-plus-outline"
             variant="ghost"
             size="sm"
-            onPress={() => setModalProveedorVisible(true)}
+            onPress={() =>
+              setModalProveedorVisible(true)
+            }
             style={styles.addSupplierButton}
           />
         </Card>
 
         {editando ? (
-          <Card variant="default" style={styles.section}>
+          <Card
+            variant="default"
+            style={styles.section}
+          >
             <View style={styles.switchRow}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.switchLabel}>Producto activo</Text>
-                <Text style={styles.switchHelper}>
+                <Text
+                  style={[
+                    styles.switchLabel,
+                    {
+                      color:
+                        colors.textPrimary,
+                    },
+                  ]}
+                >
+                  Producto activo
+                </Text>
+
+                <Text
+                  style={[
+                    styles.switchHelper,
+                    {
+                      color: colors.textMuted,
+                    },
+                  ]}
+                >
                   Los inactivos no aparecen en el POS
                 </Text>
               </View>
+
               <Switch
                 value={activo}
                 onValueChange={setActivo}
-                trackColor={{ true: colors.primary, false: colors.border }}
+                trackColor={{
+                  true: colors.primary,
+                  false: colors.border,
+                }}
               />
             </View>
           </Card>
         ) : null}
 
         <Button
-          label={editando ? 'Guardar cambios' : 'Crear producto'}
+          label={
+            editando
+              ? 'Guardar cambios'
+              : 'Crear producto'
+          }
           onPress={() => {
             void handleSubmit(onSubmit)();
           }}
@@ -635,11 +926,19 @@ export default function ProductoFormScreen(): React.ReactElement {
         visible={toast.visible}
         message={toast.message}
         variant={toast.variant}
-        onHide={() => setToast((t) => ({ ...t, visible: false }))}
+        onHide={() =>
+          setToast((t) => ({
+            ...t,
+            visible: false,
+          }))
+        }
       />
+
       <Modal
         visible={modalCategoriaVisible}
-        onClose={() => setModalCategoriaVisible(false)}
+        onClose={() =>
+          setModalCategoriaVisible(false)
+        }
         title="Nueva categoría"
         scrollable
         footer={
@@ -647,9 +946,12 @@ export default function ProductoFormScreen(): React.ReactElement {
             <Button
               label="Cancelar"
               variant="outline"
-              onPress={() => setModalCategoriaVisible(false)}
+              onPress={() =>
+                setModalCategoriaVisible(false)
+              }
               style={styles.modalButton}
             />
+
             <Button
               label="Guardar"
               loading={savingCategoria}
@@ -669,6 +971,7 @@ export default function ProductoFormScreen(): React.ReactElement {
           autoCapitalize="words"
           required
         />
+
         <Input
           label="Descripción"
           value={categoriaDescripcion}
@@ -677,9 +980,12 @@ export default function ProductoFormScreen(): React.ReactElement {
           numberOfLines={3}
         />
       </Modal>
+
       <Modal
         visible={modalProveedorVisible}
-        onClose={() => setModalProveedorVisible(false)}
+        onClose={() =>
+          setModalProveedorVisible(false)
+        }
         title="Nuevo proveedor"
         scrollable
         footer={
@@ -687,9 +993,12 @@ export default function ProductoFormScreen(): React.ReactElement {
             <Button
               label="Cancelar"
               variant="outline"
-              onPress={() => setModalProveedorVisible(false)}
+              onPress={() =>
+                setModalProveedorVisible(false)
+              }
               style={styles.modalButton}
             />
+
             <Button
               label="Guardar"
               loading={savingProveedor}
@@ -709,18 +1018,21 @@ export default function ProductoFormScreen(): React.ReactElement {
           autoCapitalize="words"
           required
         />
+
         <Input
           label="Persona de contacto"
           value={proveedorContacto}
           onChangeText={setProveedorContacto}
           autoCapitalize="words"
         />
+
         <Input
           label="Teléfono"
           value={proveedorTelefono}
           onChangeText={setProveedorTelefono}
           keyboardType="phone-pad"
         />
+
         <Input
           label="Correo electrónico"
           value={proveedorEmail}
@@ -729,6 +1041,15 @@ export default function ProductoFormScreen(): React.ReactElement {
           autoCapitalize="none"
         />
       </Modal>
+
+      <SuccessPulse
+        visible={pulseVisible}
+        label={
+          editando
+            ? 'Producto actualizado'
+            : 'Producto creado'
+        }
+      />
     </KeyboardScreen>
   );
 }
@@ -739,39 +1060,69 @@ const styles = StyleSheet.create({
     padding: spacing.lg,
     paddingBottom: spacing.giant,
   },
+
   imageCard: {
     marginBottom: spacing.md,
   },
-  imageActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
-  imageAction: { flex: 1 },
-  addSupplierButton: { alignSelf: 'flex-start', marginTop: -spacing.sm },
-  modalActions: { flexDirection: 'row', gap: spacing.sm },
-  modalButton: { flex: 1 },
-  section: { marginBottom: spacing.md },
+
+  imageActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+
+  imageAction: {
+    flex: 1,
+  },
+
+  addSupplierButton: {
+    alignSelf: 'flex-start',
+    marginTop: -spacing.sm,
+  },
+
+  modalActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+
+  modalButton: {
+    flex: 1,
+  },
+
+  section: {
+    marginBottom: spacing.md,
+  },
+
   sectionTitle: {
     ...typography.h3,
-    color: colors.textPrimary,
     marginBottom: spacing.lg,
   },
+
   switchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
   },
-  switchLabel: { ...typography.bodyBold, color: colors.textPrimary },
-  switchHelper: { ...typography.small, color: colors.textMuted, marginTop: 2 },
 
-  // Fila de código de barras con escáner
+  switchLabel: {
+    ...typography.bodyBold,
+  },
+
+  switchHelper: {
+    ...typography.small,
+    marginTop: 2,
+  },
+
   codigoWrapper: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: spacing.sm,
   },
+
   scanBtn: {
     width: 48,
     height: 48,
     borderRadius: radius.md,
-    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: spacing.lg,

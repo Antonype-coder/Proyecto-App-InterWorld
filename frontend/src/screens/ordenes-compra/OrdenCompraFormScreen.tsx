@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, TextInput, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
+import { useSuccessPulse } from '@hooks/useSuccessPulse';
 import { ordenesCompraApi, proveedoresApi, productosApi } from '@api/index';
 import type { Proveedor, Producto } from '@tipos/index';
 import { formatCurrency, formatNumericInput, parseNumericInput } from '@utils/format';
@@ -15,6 +17,7 @@ import Button from '@components/ui/Button';
 import Input from '@components/ui/Input';
 import Modal from '@components/ui/Modal';
 import Toast from '@components/ui/Toast';
+import { SuccessPulse } from '@components/feedback';
 import type { ToastVariant } from '@tipos/index';
 
 interface ItemLocal {
@@ -27,6 +30,7 @@ interface ItemLocal {
 
 export default function OrdenCompraFormScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
+  const colors = useColors();
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
   const [proveedorId, setProveedorId] = useState<number | null>(null);
@@ -38,6 +42,7 @@ export default function OrdenCompraFormScreen(): React.ReactElement {
   const [busqProv, setBusqProv] = useState('');
   const [busqProd, setBusqProd] = useState('');
   const [saving, setSaving] = useState(false);
+  const [pulseVisible, triggerPulse] = useSuccessPulse();
 
   const [toast, setToast] = useState<{ visible: boolean; message: string; variant: ToastVariant }>({
     visible: false, message: '', variant: 'info',
@@ -52,9 +57,7 @@ export default function OrdenCompraFormScreen(): React.ReactElement {
         ]);
         setProveedores(provs);
         setProductos(prods.items);
-      } catch {
-        // ignorar
-      }
+      } catch { /* ignorar */ }
     })();
   }, []);
 
@@ -80,10 +83,7 @@ export default function OrdenCompraFormScreen(): React.ReactElement {
   };
 
   const setCantidad = (pid: number, cant: number): void => {
-    if (cant <= 0) {
-      setItems((prev) => prev.filter((i) => i.producto_id !== pid));
-      return;
-    }
+    if (cant <= 0) { setItems((prev) => prev.filter((i) => i.producto_id !== pid)); return; }
     setItems((prev) => prev.map((i) => i.producto_id === pid ? { ...i, cantidad: cant } : i));
   };
 
@@ -94,7 +94,6 @@ export default function OrdenCompraFormScreen(): React.ReactElement {
   const onSubmit = async (): Promise<void> => {
     if (!proveedorId) { setToast({ visible: true, message: 'Selecciona un proveedor', variant: 'error' }); return; }
     if (items.length === 0) { setToast({ visible: true, message: 'Agrega al menos un producto', variant: 'error' }); return; }
-
     setSaving(true);
     try {
       await ordenesCompraApi.crear({
@@ -109,7 +108,8 @@ export default function OrdenCompraFormScreen(): React.ReactElement {
         })),
       });
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      navigation.goBack();
+      triggerPulse();
+      setTimeout(() => navigation.goBack(), 700);
     } catch (e) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const msg = e instanceof Error ? e.message : 'Error al guardar';
@@ -119,10 +119,8 @@ export default function OrdenCompraFormScreen(): React.ReactElement {
     }
   };
 
-  const provsFiltrados = proveedores.filter((p) => {
-    if (!busqProv) return true;
-    return p.nombre.toLowerCase().includes(busqProv.toLowerCase());
-  });
+  const provsFiltrados = proveedores.filter((p) => !busqProv || p.nombre.toLowerCase().includes(busqProv.toLowerCase()));
+
   const prodsFiltrados = productos.filter((p) => {
     if (!busqProd) return true;
     const q = busqProd.toLowerCase();
@@ -135,15 +133,22 @@ export default function OrdenCompraFormScreen(): React.ReactElement {
 
       <View style={styles.content}>
         <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Proveedor</Text>
-          <Pressable onPress={() => setModalProv(true)} style={styles.selectBox}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Proveedor</Text>
+          <Pressable
+            onPress={() => setModalProv(true)}
+            style={[styles.selectBox, { backgroundColor: colors.surface, borderColor: colors.border }]}
+          >
             {proveedorSel ? (
               <View style={{ flex: 1 }}>
-                <Text style={styles.selectValue}>{proveedorSel.nombre}</Text>
-                {proveedorSel.contacto ? <Text style={styles.selectSub}>{proveedorSel.contacto}</Text> : null}
+                <Text style={[styles.selectValue, { color: colors.textPrimary }]}>{proveedorSel.nombre}</Text>
+                {proveedorSel.contacto ? (
+                  <Text style={[styles.selectSub, { color: colors.textMuted }]}>{proveedorSel.contacto}</Text>
+                ) : null}
               </View>
             ) : (
-              <Text style={styles.selectPlaceholder}>Seleccionar proveedor</Text>
+              <Text style={[styles.selectPlaceholder, { color: colors.textMuted }]}>
+                Seleccionar proveedor
+              </Text>
             )}
             <MaterialCommunityIcons name="chevron-down" size={18} color={colors.textMuted} />
           </Pressable>
@@ -151,36 +156,57 @@ export default function OrdenCompraFormScreen(): React.ReactElement {
 
         <Card variant="default" style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Productos ({items.length})</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+              Productos ({items.length})
+            </Text>
             <Pressable onPress={() => setModalProd(true)}>
-              <Text style={styles.addLink}>+ Agregar</Text>
+              <Text style={[styles.addLink, { color: colors.accent }]}>+ Agregar</Text>
             </Pressable>
           </View>
 
           {items.length === 0 ? (
             <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>Sin productos</Text>
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>Sin productos</Text>
             </View>
           ) : (
             items.map((it) => (
-              <View key={it.producto_id} style={styles.itemRow}>
+              <View key={it.producto_id} style={[styles.itemRow, { borderTopColor: colors.border }]}>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.itemNombre} numberOfLines={1}>{it.producto_nombre}</Text>
-                  <Text style={styles.itemCodigo}>{it.codigo_barras}</Text>
+                  <Text
+                    style={[styles.itemNombre, { color: colors.textPrimary }]}
+                    numberOfLines={1}
+                  >
+                    {it.producto_nombre}
+                  </Text>
+                  <Text style={[styles.itemCodigo, { color: colors.textMuted }]}>
+                    {it.codigo_barras}
+                  </Text>
+
                   <View style={styles.itemInputs}>
                     <View style={styles.itemInput}>
-                      <Text style={styles.itemInputLabel}>Cant.</Text>
+                      <Text style={[styles.itemInputLabel, { color: colors.textMuted }]}>
+                        Cant.
+                      </Text>
                       <TextInput
-                        style={styles.itemInputField}
+                        style={[
+                          styles.itemInputField,
+                          { backgroundColor: colors.bgSubtle, color: colors.textPrimary },
+                        ]}
                         keyboardType="numeric"
                         value={String(it.cantidad)}
                         onChangeText={(t) => setCantidad(it.producto_id, parseInt(t) || 0)}
                       />
                     </View>
+
                     <View style={styles.itemInput}>
-                      <Text style={styles.itemInputLabel}>Precio</Text>
+                      <Text style={[styles.itemInputLabel, { color: colors.textMuted }]}>
+                        Precio
+                      </Text>
                       <TextInput
-                        style={styles.itemInputField}
+                        style={[
+                          styles.itemInputField,
+                          { backgroundColor: colors.bgSubtle, color: colors.textPrimary },
+                        ]}
                         keyboardType="decimal-pad"
                         value={formatNumericInput(String(it.precio_unitario))}
                         onChangeText={(t) =>
@@ -190,7 +216,11 @@ export default function OrdenCompraFormScreen(): React.ReactElement {
                     </View>
                   </View>
                 </View>
-                <Pressable onPress={() => setCantidad(it.producto_id, 0)} style={styles.removeBtn}>
+
+                <Pressable
+                  onPress={() => setCantidad(it.producto_id, 0)}
+                  style={styles.removeBtn}
+                >
                   <MaterialCommunityIcons name="close" size={16} color={colors.danger} />
                 </Pressable>
               </View>
@@ -199,18 +229,22 @@ export default function OrdenCompraFormScreen(): React.ReactElement {
         </Card>
 
         <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Fecha esperada</Text>
-        </Card>
-
-        <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Notas</Text>
-          <Input label="Notas" placeholder="Opcional" value={notas} onChangeText={setNotas} multiline />
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Notas</Text>
+          <Input
+            label="Notas"
+            placeholder="Opcional"
+            value={notas}
+            onChangeText={setNotas}
+            multiline
+          />
         </Card>
 
         <Card variant="elevated" style={styles.totalCard}>
           <View style={styles.totalRow}>
-            <Text style={styles.totalLabel}>Total</Text>
-            <Text style={styles.totalValue}>{formatCurrency(total)}</Text>
+            <Text style={[styles.totalLabel, { color: colors.textPrimary }]}>Total</Text>
+            <Text style={[styles.totalValue, { color: colors.textPrimary }]}>
+              {formatCurrency(total)}
+            </Text>
           </View>
         </Card>
 
@@ -225,55 +259,96 @@ export default function OrdenCompraFormScreen(): React.ReactElement {
         />
       </View>
 
-      <Modal visible={modalProv} onClose={() => setModalProv(false)} title="Seleccionar proveedor" scrollable>
-        <View style={styles.modalSearchBox}>
+      <Modal
+        visible={modalProv}
+        onClose={() => setModalProv(false)}
+        title="Seleccionar proveedor"
+        scrollable
+      >
+        <View style={[styles.modalSearchBox, { backgroundColor: colors.bgSubtle }]}>
           <MaterialCommunityIcons name="magnify" size={18} color={colors.textMuted} />
           <TextInput
             placeholder="Buscar proveedor"
             placeholderTextColor={colors.textMuted}
             value={busqProv}
             onChangeText={setBusqProv}
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: colors.textPrimary }]}
           />
         </View>
+
         {provsFiltrados.map((p, idx) => (
           <Pressable
             key={p.id}
-            onPress={() => { setProveedorId(p.id); setModalProv(false); setBusqProv(''); }}
-            style={[styles.modalRow, idx === provsFiltrados.length - 1 ? styles.modalRowLast : null]}
+            onPress={() => {
+              setProveedorId(p.id);
+              setModalProv(false);
+              setBusqProv('');
+            }}
+            style={[
+              styles.modalRow,
+              { borderBottomColor: colors.border },
+              idx === provsFiltrados.length - 1 ? styles.modalRowLast : null,
+            ]}
           >
-            <Text style={styles.modalNombre}>{p.nombre}</Text>
+            <Text style={[styles.modalNombre, { color: colors.textPrimary }]}>
+              {p.nombre}
+            </Text>
           </Pressable>
         ))}
       </Modal>
 
-      <Modal visible={modalProd} onClose={() => setModalProd(false)} title="Agregar producto" scrollable>
-        <View style={styles.modalSearchBox}>
+      <Modal
+        visible={modalProd}
+        onClose={() => setModalProd(false)}
+        title="Agregar producto"
+        scrollable
+      >
+        <View style={[styles.modalSearchBox, { backgroundColor: colors.bgSubtle }]}>
           <MaterialCommunityIcons name="magnify" size={18} color={colors.textMuted} />
           <TextInput
             placeholder="Buscar producto"
             placeholderTextColor={colors.textMuted}
             value={busqProd}
             onChangeText={setBusqProd}
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: colors.textPrimary }]}
           />
         </View>
+
         {prodsFiltrados.slice(0, 50).map((p, idx) => (
           <Pressable
             key={p.id}
             onPress={() => agregarProducto(p)}
-            style={[styles.modalRow, idx === prodsFiltrados.length - 1 ? styles.modalRowLast : null]}
+            style={[
+              styles.modalRow,
+              { borderBottomColor: colors.border },
+              idx === prodsFiltrados.length - 1 ? styles.modalRowLast : null,
+            ]}
           >
             <View style={{ flex: 1 }}>
-              <Text style={styles.modalNombre}>{p.nombre}</Text>
-              <Text style={styles.modalSub}>Stock actual: {p.stock}</Text>
+              <Text style={[styles.modalNombre, { color: colors.textPrimary }]}>
+                {p.nombre}
+              </Text>
+              <Text style={[styles.modalSub, { color: colors.textMuted }]}>
+                Stock actual: {p.stock}
+              </Text>
             </View>
-            <MaterialCommunityIcons name="plus-circle-outline" size={20} color={colors.primary} />
+            <MaterialCommunityIcons
+              name="plus-circle-outline"
+              size={20}
+              color={colors.primary}
+            />
           </Pressable>
         ))}
       </Modal>
 
-      <Toast visible={toast.visible} message={toast.message} variant={toast.variant} onHide={() => setToast((t) => ({ ...t, visible: false }))} />
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        variant={toast.variant}
+        onHide={() => setToast((t) => ({ ...t, visible: false }))}
+      />
+
+      <SuccessPulse visible={pulseVisible} label="Orden creada" />
     </KeyboardScreen>
   );
 }
@@ -281,43 +356,74 @@ export default function OrdenCompraFormScreen(): React.ReactElement {
 const styles = StyleSheet.create({
   content: { padding: spacing.lg, paddingBottom: spacing.giant },
   section: { marginBottom: spacing.md },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
-  sectionTitle: { ...typography.h3, color: colors.textPrimary, marginBottom: 0 },
-  addLink: { ...typography.buttonSmall, color: colors.accent },
-  selectBox: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
-    borderRadius: radius.md, padding: spacing.md, minHeight: 52,
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
   },
-  selectValue: { ...typography.bodyBold, color: colors.textPrimary },
-  selectSub: { ...typography.small, color: colors.textMuted, marginTop: 2 },
-  selectPlaceholder: { flex: 1, ...typography.body, color: colors.textMuted },
+  sectionTitle: { ...typography.h3 },
+  addLink: { ...typography.buttonSmall },
+  selectBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    minHeight: 52,
+  },
+  selectValue: { ...typography.bodyBold },
+  selectSub: { ...typography.small, marginTop: 2 },
+  selectPlaceholder: { flex: 1, ...typography.body },
   emptyBox: { padding: spacing.lg, alignItems: 'center' },
-  emptyText: { ...typography.caption, color: colors.textMuted },
-  itemRow: { flexDirection: 'row', paddingVertical: spacing.md, borderTopWidth: 1, borderTopColor: colors.border, gap: spacing.sm },
-  itemNombre: { ...typography.bodyBold, color: colors.textPrimary },
-  itemCodigo: { ...typography.small, color: colors.textMuted, marginTop: 2 },
+  emptyText: { ...typography.caption },
+  itemRow: {
+    flexDirection: 'row',
+    paddingVertical: spacing.md,
+    borderTopWidth: 1,
+    gap: spacing.sm,
+  },
+  itemNombre: { ...typography.bodyBold },
+  itemCodigo: { ...typography.small, marginTop: 2 },
   itemInputs: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   itemInput: { flex: 1 },
-  itemInputLabel: { ...typography.tiny, color: colors.textMuted, marginBottom: 2 },
+  itemInputLabel: { ...typography.tiny, marginBottom: 2 },
   itemInputField: {
-    backgroundColor: colors.bgSubtle, borderRadius: radius.sm,
-    paddingHorizontal: spacing.sm, paddingVertical: spacing.xs,
-    ...typography.body, color: colors.textPrimary,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    ...typography.body,
   },
   removeBtn: { padding: spacing.xs, alignSelf: 'flex-start' },
   totalCard: { marginBottom: spacing.md },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  totalLabel: { ...typography.h3, color: colors.textPrimary },
-  totalValue: { ...typography.price, color: colors.textPrimary },
-  modalSearchBox: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.bgSubtle, borderRadius: radius.md,
-    paddingHorizontal: spacing.md, height: 40, marginBottom: spacing.md,
+  totalRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  searchInput: { flex: 1, ...typography.body, color: colors.textPrimary, marginLeft: spacing.sm, paddingVertical: 0 },
-  modalRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  totalLabel: { ...typography.h3 },
+  totalValue: { ...typography.price },
+  modalSearchBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    height: 40,
+    marginBottom: spacing.md,
+  },
+  searchInput: {
+    flex: 1,
+    ...typography.body,
+    marginLeft: spacing.sm,
+    paddingVertical: 0,
+  },
+  modalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+  },
   modalRowLast: { borderBottomWidth: 0 },
-  modalNombre: { ...typography.bodyBold, color: colors.textPrimary },
-  modalSub: { ...typography.small, color: colors.textMuted, marginTop: 2 },
+  modalNombre: { ...typography.bodyBold },
+  modalSub: { ...typography.small, marginTop: 2 },
 });

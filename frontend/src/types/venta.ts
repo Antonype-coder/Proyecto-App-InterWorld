@@ -55,6 +55,7 @@ export interface VentaInput {
   cliente_id?: number | null;
   descuento?: number;
   notas?: string;
+  metodo_pago?: 'efectivo' | 'tarjeta' | 'transferencia' | 'otro';
   items: VentaItemInput[];
 }
 

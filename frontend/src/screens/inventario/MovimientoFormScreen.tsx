@@ -1,24 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  FlatList,
-  TextInput,
-  ScrollView,
-} from 'react-native';
+import { View, Text, StyleSheet, Pressable, FlatList, TextInput } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import {
-  useNavigation,
-  useRoute,
-  RouteProp,
-} from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
+import { useSmartBack } from '@hooks/useReturnTo';
+import { useSuccessPulse } from '@hooks/useSuccessPulse';
 import { movimientoSchema, type MovimientoFormData } from '@utils/validators';
 import { productosApi, inventarioApi } from '@api/index';
 import type { Producto, InventarioStackParamList } from '@tipos/index';
@@ -28,6 +19,7 @@ import Card from '@components/ui/Card';
 import Button from '@components/ui/Button';
 import Modal from '@components/ui/Modal';
 import Toast from '@components/ui/Toast';
+import { SuccessPulse } from '@components/feedback';
 import FormInput from '@components/forms/FormInput';
 import FormNumberInput from '@components/forms/FormNumberInput';
 import type { ToastVariant } from '@tipos/index';
@@ -38,6 +30,8 @@ export default function MovimientoFormScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
   const route = useRoute<Params>();
   const productoIdInicial = route.params?.productoId;
+  const colors = useColors();
+  const goBack = useSmartBack();
 
   const [productos, setProductos] = useState<Producto[]>([]);
   const [productoSel, setProductoSel] = useState<Producto | null>(null);
@@ -45,6 +39,7 @@ export default function MovimientoFormScreen(): React.ReactElement {
   const [busquedaProd, setBusquedaProd] = useState('');
   const [saving, setSaving] = useState(false);
   const [loadingProds, setLoadingProds] = useState(true);
+  const [pulseVisible, triggerPulse] = useSuccessPulse();
 
   const [toast, setToast] = useState<{
     visible: boolean;
@@ -52,20 +47,9 @@ export default function MovimientoFormScreen(): React.ReactElement {
     variant: ToastVariant;
   }>({ visible: false, message: '', variant: 'info' });
 
-  const {
-    control,
-    handleSubmit,
-    setValue,
-    watch,
-    formState: { errors },
-  } = useForm<MovimientoFormData>({
+  const { control, handleSubmit, setValue, watch } = useForm<MovimientoFormData>({
     resolver: zodResolver(movimientoSchema) as never,
-    defaultValues: {
-      producto_id: 0,
-      tipo: 'entrada',
-      cantidad: 1,
-      motivo: '',
-    },
+    defaultValues: { producto_id: 0, tipo: 'entrada', cantidad: 1, motivo: '' },
   });
 
   const tipoActual = watch('tipo');
@@ -75,7 +59,6 @@ export default function MovimientoFormScreen(): React.ReactElement {
       try {
         const res = await productosApi.listar({ activo: 1, limit: 500 });
         setProductos(res.items);
-
         if (productoIdInicial) {
           const p = res.items.find((x) => x.id === productoIdInicial);
           if (p) {
@@ -101,7 +84,6 @@ export default function MovimientoFormScreen(): React.ReactElement {
       });
       return;
     }
-
     setSaving(true);
     try {
       await inventarioApi.registrarMovimiento({
@@ -110,11 +92,11 @@ export default function MovimientoFormScreen(): React.ReactElement {
         cantidad: Number(data.cantidad),
         motivo: data.motivo,
       });
-
       await Haptics.notificationAsync(
         Haptics.NotificationFeedbackType.Success,
       );
-      navigation.goBack();
+      triggerPulse();
+      setTimeout(() => goBack(), 700);
     } catch (e) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const msg = e instanceof Error ? e.message : 'Error al registrar';
@@ -134,100 +116,9 @@ export default function MovimientoFormScreen(): React.ReactElement {
   });
 
   return (
-    <KeyboardScreen>
-      <TopBar
-        title="Movimiento de inventario"
-        onBack={() => navigation.goBack()}
-      />
-
-      <View style={styles.content}>
-        <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Producto</Text>
-          <Pressable
-            onPress={() => setModalProductos(true)}
-            style={styles.selectBox}
-          >
-            {productoSel ? (
-              <View style={{ flex: 1 }}>
-                <Text style={styles.selectValue}>
-                  {productoSel.nombre}
-                </Text>
-                <Text style={styles.selectSub}>
-                  {productoSel.codigo_barras} · Stock: {productoSel.stock}
-                </Text>
-              </View>
-            ) : (
-              <Text style={styles.selectPlaceholder}>
-                Seleccionar producto
-              </Text>
-            )}
-            <MaterialCommunityIcons
-              name="chevron-down"
-              size={18}
-              color={colors.textMuted}
-            />
-          </Pressable>
-        </Card>
-
-        <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Tipo de movimiento</Text>
-          <View style={styles.tipoRow}>
-            <TipoBtn
-              icon="arrow-down"
-              label="Entrada"
-              active={tipoActual === 'entrada'}
-              color={colors.success}
-              onPress={() => setValue('tipo', 'entrada')}
-            />
-            <TipoBtn
-              icon="arrow-up"
-              label="Salida"
-              active={tipoActual === 'salida'}
-              color={colors.danger}
-              onPress={() => setValue('tipo', 'salida')}
-            />
-            <TipoBtn
-              icon="swap-horizontal"
-              label="Ajuste"
-              active={tipoActual === 'ajuste'}
-              color={colors.info}
-              onPress={() => setValue('tipo', 'ajuste')}
-            />
-          </View>
-          <Text style={styles.hintText}>
-            {tipoActual === 'entrada'
-              ? 'Se sumará al stock actual'
-              : tipoActual === 'salida'
-                ? 'Se restará del stock actual'
-                : 'Se fijará el stock exacto'}
-          </Text>
-        </Card>
-
-        <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>
-            {tipoActual === 'ajuste' ? 'Stock nuevo' : 'Cantidad'}
-          </Text>
-          <FormNumberInput
-            control={control}
-            name="cantidad"
-            label={tipoActual === 'ajuste' ? 'Stock final' : 'Cantidad'}
-            icon="numeric"
-            required
-            integer
-          />
-        </Card>
-
-        <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Motivo</Text>
-          <FormInput
-            control={control}
-            name="motivo"
-            label="Razón"
-            multiline
-            required
-          />
-        </Card>
-
+    <KeyboardScreen
+      header={<TopBar title="Movimiento de inventario" onBack={goBack} />}
+      footer={
         <Button
           label="Registrar movimiento"
           onPress={() => {
@@ -239,7 +130,105 @@ export default function MovimientoFormScreen(): React.ReactElement {
           size="lg"
           fullWidth
         />
-      </View>
+      }
+    >
+      <Card variant="default" style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+          Producto
+        </Text>
+        <Pressable
+          onPress={() => setModalProductos(true)}
+          style={[
+            styles.selectBox,
+            { backgroundColor: colors.surface, borderColor: colors.border },
+          ]}
+        >
+          {productoSel ? (
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.selectValue, { color: colors.textPrimary }]}>
+                {productoSel.nombre}
+              </Text>
+              <Text style={[styles.selectSub, { color: colors.textMuted }]}>
+                {productoSel.codigo_barras} · Stock: {productoSel.stock}
+              </Text>
+            </View>
+          ) : (
+            <Text
+              style={[styles.selectPlaceholder, { color: colors.textMuted }]}
+            >
+              Seleccionar producto
+            </Text>
+          )}
+          <MaterialCommunityIcons
+            name="chevron-down"
+            size={18}
+            color={colors.textMuted}
+          />
+        </Pressable>
+      </Card>
+
+      <Card variant="default" style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+          Tipo de movimiento
+        </Text>
+        <View style={styles.tipoRow}>
+          <TipoBtn
+            icon="arrow-down"
+            label="Entrada"
+            active={tipoActual === 'entrada'}
+            color={colors.success}
+            onPress={() => setValue('tipo', 'entrada')}
+          />
+          <TipoBtn
+            icon="arrow-up"
+            label="Salida"
+            active={tipoActual === 'salida'}
+            color={colors.danger}
+            onPress={() => setValue('tipo', 'salida')}
+          />
+          <TipoBtn
+            icon="swap-horizontal"
+            label="Ajuste"
+            active={tipoActual === 'ajuste'}
+            color={colors.info}
+            onPress={() => setValue('tipo', 'ajuste')}
+          />
+        </View>
+        <Text style={[styles.hintText, { color: colors.textMuted }]}>
+          {tipoActual === 'entrada'
+            ? 'Se sumará al stock actual'
+            : tipoActual === 'salida'
+              ? 'Se restará del stock actual'
+              : 'Se fijará el stock exacto'}
+        </Text>
+      </Card>
+
+      <Card variant="default" style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+          {tipoActual === 'ajuste' ? 'Stock nuevo' : 'Cantidad'}
+        </Text>
+        <FormNumberInput
+          control={control}
+          name="cantidad"
+          label={tipoActual === 'ajuste' ? 'Stock final' : 'Cantidad'}
+          icon="numeric"
+          required
+          integer
+        />
+      </Card>
+
+      <Card variant="default" style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+          Motivo
+        </Text>
+        <FormInput
+          control={control}
+          name="motivo"
+          label="Razón"
+          multiline
+          required
+        />
+      </Card>
 
       <Modal
         visible={modalProductos}
@@ -247,7 +236,9 @@ export default function MovimientoFormScreen(): React.ReactElement {
         title="Seleccionar producto"
         scrollable
       >
-        <View style={styles.modalSearchBox}>
+        <View
+          style={[styles.modalSearchBox, { backgroundColor: colors.bgSubtle }]}
+        >
           <MaterialCommunityIcons
             name="magnify"
             size={18}
@@ -258,10 +249,9 @@ export default function MovimientoFormScreen(): React.ReactElement {
             placeholderTextColor={colors.textMuted}
             value={busquedaProd}
             onChangeText={setBusquedaProd}
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: colors.textPrimary }]}
           />
         </View>
-
         <FlatList
           data={productosFiltrados}
           keyExtractor={(item) => String(item.id)}
@@ -270,10 +260,11 @@ export default function MovimientoFormScreen(): React.ReactElement {
             <Pressable
               style={({ pressed }) => [
                 styles.modalRow,
+                { borderBottomColor: colors.border },
                 index === productosFiltrados.length - 1
                   ? styles.modalRowLast
                   : null,
-                pressed ? styles.modalRowPressed : null,
+                pressed ? { opacity: 0.7 } : null,
               ]}
               onPress={() => {
                 setProductoSel(item);
@@ -283,8 +274,12 @@ export default function MovimientoFormScreen(): React.ReactElement {
               }}
             >
               <View style={{ flex: 1 }}>
-                <Text style={styles.modalNombre}>{item.nombre}</Text>
-                <Text style={styles.modalSub}>
+                <Text
+                  style={[styles.modalNombre, { color: colors.textPrimary }]}
+                >
+                  {item.nombre}
+                </Text>
+                <Text style={[styles.modalSub, { color: colors.textMuted }]}>
                   {item.codigo_barras} · Stock: {item.stock}
                 </Text>
               </View>
@@ -296,7 +291,9 @@ export default function MovimientoFormScreen(): React.ReactElement {
             </Pressable>
           )}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>Sin resultados</Text>
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+              Sin resultados
+            </Text>
           }
         />
       </Modal>
@@ -307,6 +304,8 @@ export default function MovimientoFormScreen(): React.ReactElement {
         variant={toast.variant}
         onHide={() => setToast((t) => ({ ...t, visible: false }))}
       />
+
+      <SuccessPulse visible={pulseVisible} label="Movimiento registrado" />
     </KeyboardScreen>
   );
 }
@@ -318,11 +317,13 @@ function TipoBtn(props: {
   color: string;
   onPress: () => void;
 }): React.ReactElement {
+  const colors = useColors();
   return (
     <Pressable
       onPress={props.onPress}
       style={[
         styles.tipoBtn,
+        { backgroundColor: colors.surface, borderColor: colors.border },
         props.active
           ? { borderColor: props.color, backgroundColor: props.color + '10' }
           : null,
@@ -336,8 +337,12 @@ function TipoBtn(props: {
       <Text
         style={[
           styles.tipoLabel,
+          { color: colors.textSecondary },
           props.active
-            ? { color: props.color, fontFamily: typography.button.fontFamily }
+            ? {
+                color: props.color,
+                fontFamily: typography.button.fontFamily,
+              }
             : null,
         ]}
       >
@@ -348,30 +353,19 @@ function TipoBtn(props: {
 }
 
 const styles = StyleSheet.create({
-  content: { padding: spacing.lg, paddingBottom: spacing.giant },
   section: { marginBottom: spacing.md },
-  sectionTitle: {
-    ...typography.h3,
-    color: colors.textPrimary,
-    marginBottom: spacing.lg,
-  },
+  sectionTitle: { ...typography.h3, marginBottom: spacing.lg },
   selectBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: radius.md,
     padding: spacing.md,
     minHeight: 52,
   },
-  selectPlaceholder: {
-    flex: 1,
-    ...typography.body,
-    color: colors.textMuted,
-  },
-  selectValue: { ...typography.bodyBold, color: colors.textPrimary },
-  selectSub: { ...typography.small, color: colors.textMuted, marginTop: 2 },
+  selectPlaceholder: { flex: 1, ...typography.body },
+  selectValue: { ...typography.bodyBold },
+  selectSub: { ...typography.small, marginTop: 2 },
   tipoRow: { flexDirection: 'row', gap: spacing.sm },
   tipoBtn: {
     flex: 1,
@@ -379,21 +373,13 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
     gap: spacing.xs,
   },
-  tipoLabel: { ...typography.small, color: colors.textSecondary },
-  hintText: {
-    ...typography.small,
-    color: colors.textMuted,
-    marginTop: spacing.md,
-    fontStyle: 'italic',
-  },
+  tipoLabel: { ...typography.small },
+  hintText: { ...typography.small, marginTop: spacing.md, fontStyle: 'italic' },
   modalSearchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.bgSubtle,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     height: 40,
@@ -402,7 +388,6 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     ...typography.body,
-    color: colors.textPrimary,
     marginLeft: spacing.sm,
     paddingVertical: 0,
   },
@@ -411,15 +396,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
   modalRowLast: { borderBottomWidth: 0 },
-  modalRowPressed: { opacity: 0.7 },
-  modalNombre: { ...typography.bodyBold, color: colors.textPrimary },
-  modalSub: { ...typography.small, color: colors.textMuted, marginTop: 2 },
+  modalNombre: { ...typography.bodyBold },
+  modalSub: { ...typography.small, marginTop: 2 },
   emptyText: {
     ...typography.caption,
-    color: colors.textMuted,
     textAlign: 'center',
     paddingVertical: spacing.lg,
   },

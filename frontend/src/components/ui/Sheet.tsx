@@ -9,13 +9,8 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  colors,
-  radius,
-  spacing,
-  typography,
-  shadows,
-} from '@theme/index';
+import { radius, spacing, typography, shadows } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 
 interface SheetProps {
   visible: boolean;
@@ -33,6 +28,7 @@ export default function Sheet({
   scrollable = false,
 }: SheetProps): React.ReactElement {
   const insets = useSafeAreaInsets();
+  const colors = useColors();
 
   return (
     <RNModal
@@ -42,16 +38,30 @@ export default function Sheet({
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
+      <Pressable
+        style={[styles.overlay, { backgroundColor: colors.overlay }]}
+        onPress={onClose}
+      >
         <Pressable
-          style={[styles.content, { paddingBottom: insets.bottom + spacing.lg }]}
+          style={[
+            styles.content,
+            {
+              backgroundColor: colors.surface,
+              paddingBottom: insets.bottom + spacing.lg,
+            },
+            shadows.xl,
+          ]}
           onPress={(e) => e.stopPropagation()}
         >
-          <View style={styles.handle} />
+          <View
+            style={[styles.handle, { backgroundColor: colors.borderStrong }]}
+          />
 
           {title ? (
             <View style={styles.header}>
-              <Text style={styles.title}>{title}</Text>
+              <Text style={[styles.title, { color: colors.textPrimary }]}>
+                {title}
+              </Text>
               <Pressable onPress={onClose} hitSlop={10}>
                 <MaterialCommunityIcons
                   name="close"
@@ -81,23 +91,19 @@ export default function Sheet({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: colors.overlay,
     justifyContent: 'flex-end',
   },
   content: {
-    backgroundColor: colors.surface,
     borderTopLeftRadius: radius.xxl,
     borderTopRightRadius: radius.xxl,
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.sm,
     maxHeight: '85%',
-    ...shadows.xl,
   },
   handle: {
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: colors.borderStrong,
     alignSelf: 'center',
     marginBottom: spacing.md,
   },
@@ -107,5 +113,5 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: spacing.lg,
   },
-  title: { ...typography.h3, color: colors.textPrimary },
+  title: { ...typography.h3 },
 });

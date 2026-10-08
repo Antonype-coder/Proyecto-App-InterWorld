@@ -2,7 +2,8 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Control, Controller, FieldValues, Path } from 'react-hook-form';
 import Chip from '../ui/Chip';
-import { colors, spacing, typography } from '@theme/index';
+import { spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 
 interface ChipOption {
   label: string;
@@ -24,6 +25,8 @@ export default function FormChips<T extends FieldValues>({
   options,
   required,
 }: FormChipsProps<T>): React.ReactElement {
+  const colors = useColors();
+
   return (
     <Controller
       control={control}
@@ -32,8 +35,14 @@ export default function FormChips<T extends FieldValues>({
         <View style={styles.container}>
           {label ? (
             <View style={styles.labelRow}>
-              <Text style={styles.label}>{label}</Text>
-              {required ? <Text style={styles.required}>*</Text> : null}
+              <Text style={[styles.label, { color: colors.textPrimary }]}>
+                {label}
+              </Text>
+              {required ? (
+                <Text style={[styles.required, { color: colors.danger }]}>
+                  *
+                </Text>
+              ) : null}
             </View>
           ) : null}
 
@@ -49,7 +58,9 @@ export default function FormChips<T extends FieldValues>({
           </View>
 
           {error?.message ? (
-            <Text style={styles.error}>{error.message}</Text>
+            <Text style={[styles.error, { color: colors.danger }]}>
+              {error.message}
+            </Text>
           ) : null}
         </View>
       )}
@@ -64,12 +75,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
-  label: { ...typography.bodyBold, color: colors.textPrimary },
+  label: { ...typography.bodyBold },
   required: {
     ...typography.bodyBold,
-    color: colors.danger,
     marginLeft: 3,
   },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  error: { ...typography.small, color: colors.danger, marginTop: spacing.sm },
+  error: { ...typography.small, marginTop: spacing.sm },
 });

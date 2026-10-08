@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, StyleSheet, ViewStyle } from 'react-native';
-import { colors, spacing } from '@theme/index';
+import { spacing } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 
 interface DividerProps {
   vertical?: boolean;
@@ -13,11 +14,17 @@ export default function Divider({
   spacingVertical: sp = spacing.md,
   style,
 }: DividerProps): React.ReactElement {
+  const colors = useColors();
+
   if (vertical) {
     return (
       <View
         style={[
-          { width: 1, backgroundColor: colors.border, alignSelf: 'stretch' },
+          {
+            width: 1,
+            backgroundColor: colors.border,
+            alignSelf: 'stretch',
+          },
           style,
         ]}
       />
@@ -27,7 +34,11 @@ export default function Divider({
   return (
     <View
       style={[
-        { height: 1, backgroundColor: colors.border, marginVertical: sp },
+        {
+          height: 1,
+          backgroundColor: colors.border,
+          marginVertical: sp,
+        },
         style,
       ]}
     />

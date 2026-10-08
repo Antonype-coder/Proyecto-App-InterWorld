@@ -37,7 +37,10 @@ export default function FormNumberInput<T extends FieldValues>({
           icon={icon}
           required={required}
           helper={helper}
-          value={formatNumericInput(value !== undefined && value !== null ? String(value) : '', integer)}
+          value={formatNumericInput(
+            value !== undefined && value !== null ? String(value) : '',
+            integer,
+          )}
           onChangeText={(text) => onChange(parseNumericInput(text, integer))}
           onBlur={onBlur}
           error={error?.message}

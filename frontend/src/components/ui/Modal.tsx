@@ -8,13 +8,8 @@ import {
   ScrollView,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import {
-  colors,
-  radius,
-  spacing,
-  typography,
-  shadows,
-} from '@theme/index';
+import { radius, spacing, typography, shadows } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 
 interface ModalProps {
   visible: boolean;
@@ -33,6 +28,8 @@ export default function Modal({
   footer,
   scrollable = false,
 }: ModalProps): React.ReactElement {
+  const colors = useColors();
+
   return (
     <RNModal
       visible={visible}
@@ -41,14 +38,29 @@ export default function Modal({
       onRequestClose={onClose}
       statusBarTranslucent
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
+      <Pressable
+        style={[styles.overlay, { backgroundColor: colors.overlay }]}
+        onPress={onClose}
+      >
         <Pressable
-          style={styles.content}
+          style={[
+            styles.content,
+            {
+              backgroundColor: colors.surface,
+              borderWidth: 1,
+              borderColor: colors.border,
+            },
+            shadows.xl,
+          ]}
           onPress={(e) => e.stopPropagation()}
         >
           {title ? (
-            <View style={styles.header}>
-              <Text style={styles.title}>{title}</Text>
+            <View
+              style={[styles.header, { borderBottomColor: colors.border }]}
+            >
+              <Text style={[styles.title, { color: colors.textPrimary }]}>
+                {title}
+              </Text>
               <Pressable
                 onPress={onClose}
                 hitSlop={10}
@@ -75,7 +87,19 @@ export default function Modal({
             <View style={styles.body}>{children}</View>
           )}
 
-          {footer ? <View style={styles.footer}>{footer}</View> : null}
+          {footer ? (
+            <View
+              style={[
+                styles.footer,
+                {
+                  borderTopColor: colors.border,
+                  backgroundColor: colors.bgSubtle,
+                },
+              ]}
+            >
+              {footer}
+            </View>
+          ) : null}
         </Pressable>
       </Pressable>
     </RNModal>
@@ -85,7 +109,6 @@ export default function Modal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: colors.overlay,
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.lg,
@@ -94,10 +117,8 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 480,
     maxHeight: '85%',
-    backgroundColor: colors.surface,
     borderRadius: radius.xl,
     overflow: 'hidden',
-    ...shadows.xl,
   },
   header: {
     flexDirection: 'row',
@@ -106,11 +127,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.lg,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
   title: {
     ...typography.h3,
-    color: colors.textPrimary,
     flex: 1,
   },
   closeButton: { padding: spacing.xs, marginLeft: spacing.sm },
@@ -120,7 +139,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.lg,
     borderTopWidth: 1,
-    borderTopColor: colors.border,
-    backgroundColor: colors.bgSubtle,
   },
 });

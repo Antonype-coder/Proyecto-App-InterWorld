@@ -14,8 +14,14 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 
-import { colors, radius, spacing, typography } from '@theme/index';
-import { reportesApi, ventasApi, productosApi, configuracionApi } from '@api/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
+import {
+  reportesApi,
+  ventasApi,
+  productosApi,
+  configuracionApi,
+} from '@api/index';
 import type {
   ReporteResumen,
   VentaPorDia,
@@ -38,6 +44,7 @@ type Periodo = '7d' | '30d' | '90d';
 
 export default function ReportesScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
+  const colors = useColors();
 
   const [periodo, setPeriodo] = useState<Periodo>('30d');
   const [resumen, setResumen] = useState<ReporteResumen | null>(null);
@@ -107,7 +114,6 @@ export default function ReportesScreen(): React.ReactElement {
     }, [cargar]),
   );
 
-  // ================ EXPORTAR VENTAS PDF ================
   const exportarVentasPDF = async (): Promise<void> => {
     setExportando('ventas-pdf');
     try {
@@ -122,7 +128,9 @@ export default function ReportesScreen(): React.ReactElement {
         montoTotal: resumen?.ventas_hoy.monto ?? '0',
         ticketPromedio:
           res.total > 0
-            ? String(parseFloat(resumen?.ventas_hoy.monto ?? '0') / res.total)
+            ? String(
+                parseFloat(resumen?.ventas_hoy.monto ?? '0') / res.total,
+              )
             : '0',
         ventas: res.items.map((v) => ({
           id: v.id,
@@ -137,7 +145,9 @@ export default function ReportesScreen(): React.ReactElement {
         negocio,
       });
 
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      );
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error al exportar';
       Alert.alert('Error', msg);
@@ -146,7 +156,6 @@ export default function ReportesScreen(): React.ReactElement {
     }
   };
 
-  // ================ EXPORTAR VENTAS EXCEL ================
   const exportarVentasExcel = async (): Promise<void> => {
     setExportando('ventas-excel');
     try {
@@ -165,7 +174,9 @@ export default function ReportesScreen(): React.ReactElement {
         })),
       );
 
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      );
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error al exportar';
       Alert.alert('Error', msg);
@@ -174,7 +185,6 @@ export default function ReportesScreen(): React.ReactElement {
     }
   };
 
-  // ================ EXPORTAR INVENTARIO PDF ================
   const exportarInventarioPDF = async (): Promise<void> => {
     setExportando('inventario-pdf');
     try {
@@ -201,7 +211,9 @@ export default function ReportesScreen(): React.ReactElement {
         negocio,
       });
 
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      );
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error al exportar';
       Alert.alert('Error', msg);
@@ -210,7 +222,6 @@ export default function ReportesScreen(): React.ReactElement {
     }
   };
 
-  // ================ EXPORTAR INVENTARIO EXCEL ================
   const exportarInventarioExcel = async (): Promise<void> => {
     setExportando('inventario-excel');
     try {
@@ -228,7 +239,9 @@ export default function ReportesScreen(): React.ReactElement {
         })),
       );
 
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      );
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error al exportar';
       Alert.alert('Error', msg);
@@ -237,7 +250,6 @@ export default function ReportesScreen(): React.ReactElement {
     }
   };
 
-  // ================ EXPORTAR CARTERA PDF ================
   const exportarCarteraPDF = async (): Promise<void> => {
     if (!cartera) return;
     setExportando('cartera-pdf');
@@ -258,7 +270,9 @@ export default function ReportesScreen(): React.ReactElement {
         negocio,
       });
 
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      );
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error al exportar';
       Alert.alert('Error', msg);
@@ -267,7 +281,6 @@ export default function ReportesScreen(): React.ReactElement {
     }
   };
 
-  // ================ EXPORTAR CARTERA EXCEL ================
   const exportarCarteraExcel = async (): Promise<void> => {
     if (!cartera) return;
     setExportando('cartera-excel');
@@ -285,7 +298,9 @@ export default function ReportesScreen(): React.ReactElement {
         })),
       );
 
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      );
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Error al exportar';
       Alert.alert('Error', msg);
@@ -297,16 +312,32 @@ export default function ReportesScreen(): React.ReactElement {
   const hayDatosGrafico = ventasPorDia.length >= 2;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+      edges={['top']}
+    >
       <TopBar title="Reportes" onBack={() => navigation.goBack()} />
 
       {loading && !resumen ? (
         <View style={{ padding: spacing.lg }}>
           <View style={styles.kpiGrid}>
             {[1, 2, 3, 4].map((i) => (
-              <View key={i} style={styles.kpiCard}>
+              <View
+                key={i}
+                style={[
+                  styles.kpiCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
                 <Skeleton width="60%" height={12} />
-                <Skeleton width="80%" height={22} style={{ marginTop: spacing.sm }} />
+                <Skeleton
+                  width="80%"
+                  height={22}
+                  style={{ marginTop: spacing.sm }}
+                />
               </View>
             ))}
           </View>
@@ -334,33 +365,80 @@ export default function ReportesScreen(): React.ReactElement {
             />
           }
         >
-          {/* Selector de período */}
           <View style={styles.periodoRow}>
-            <PeriodoBtn label="7 días" active={periodo === '7d'} onPress={() => setPeriodo('7d')} />
-            <PeriodoBtn label="30 días" active={periodo === '30d'} onPress={() => setPeriodo('30d')} />
-            <PeriodoBtn label="90 días" active={periodo === '90d'} onPress={() => setPeriodo('90d')} />
+            <PeriodoBtn
+              label="7 días"
+              active={periodo === '7d'}
+              onPress={() => setPeriodo('7d')}
+            />
+            <PeriodoBtn
+              label="30 días"
+              active={periodo === '30d'}
+              onPress={() => setPeriodo('30d')}
+            />
+            <PeriodoBtn
+              label="90 días"
+              active={periodo === '90d'}
+              onPress={() => setPeriodo('90d')}
+            />
           </View>
 
-          {/* KPIs */}
           {resumen ? (
             <View style={styles.kpiGrid}>
-              <KpiCard label="Ventas hoy" value={formatCurrency(resumen.ventas_hoy.monto)} sub={`${resumen.ventas_hoy.cantidad} trans.`} />
-              <KpiCard label="Productos" value={String(resumen.productos_activos)} sub="Activos" />
-              <KpiCard label="Stock bajo" value={String(resumen.alertas_stock)} sub="Reposición" valueColor={resumen.alertas_stock > 0 ? colors.warning : undefined} />
-              <KpiCard label="Cartera" value={formatCurrency(resumen.cartera_total)} sub="Por cobrar" />
+              <KpiCard
+                label="Ventas hoy"
+                value={formatCurrency(resumen.ventas_hoy.monto)}
+                sub={`${resumen.ventas_hoy.cantidad} trans.`}
+              />
+              <KpiCard
+                label="Productos"
+                value={String(resumen.productos_activos)}
+                sub="Activos"
+              />
+              <KpiCard
+                label="Stock bajo"
+                value={String(resumen.alertas_stock)}
+                sub="Reposición"
+                valueColor={
+                  resumen.alertas_stock > 0 ? colors.warning : undefined
+                }
+              />
+              <KpiCard
+                label="Cartera"
+                value={formatCurrency(resumen.cartera_total)}
+                sub="Por cobrar"
+              />
             </View>
           ) : null}
 
-          {/* Exportar Ventas */}
-          <Text style={styles.sectionLabel}>EXPORTAR VENTAS</Text>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>
+            EXPORTAR VENTAS
+          </Text>
           <Card variant="default" style={styles.exportCard}>
             <View style={styles.exportRow}>
-              <View style={styles.exportIconWrap}>
-                <MaterialCommunityIcons name="file-pdf-box" size={24} color={colors.danger} />
+              <View
+                style={[
+                  styles.exportIconWrap,
+                  { backgroundColor: colors.bgSubtle },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="file-pdf-box"
+                  size={24}
+                  color={colors.danger}
+                />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.exportTitle}>Reporte de ventas</Text>
-                <Text style={styles.exportSub}>PDF con todas las ventas del período</Text>
+                <Text
+                  style={[styles.exportTitle, { color: colors.textPrimary }]}
+                >
+                  Reporte de ventas
+                </Text>
+                <Text
+                  style={[styles.exportSub, { color: colors.textMuted }]}
+                >
+                  PDF con todas las ventas del período
+                </Text>
               </View>
             </View>
             <View style={styles.exportBtns}>
@@ -391,18 +469,38 @@ export default function ReportesScreen(): React.ReactElement {
             </View>
           </Card>
 
-          {/* Exportar Inventario */}
-          <Text style={styles.sectionLabel}>EXPORTAR INVENTARIO</Text>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>
+            EXPORTAR INVENTARIO
+          </Text>
           <Card variant="default" style={styles.exportCard}>
             <View style={styles.exportRow}>
-              <View style={styles.exportIconWrap}>
-                <MaterialCommunityIcons name="package-variant-closed" size={24} color={colors.accent} />
+              <View
+                style={[
+                  styles.exportIconWrap,
+                  { backgroundColor: colors.bgSubtle },
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name="package-variant-closed"
+                  size={24}
+                  color={colors.accent}
+                />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.exportTitle}>Inventario valorizado</Text>
-                <Text style={styles.exportSub}>
-                  {productos.length} productos · {formatCurrency(
-                    productos.reduce((s, p) => s + p.stock * parseFloat(p.precio_compra), 0),
+                <Text
+                  style={[styles.exportTitle, { color: colors.textPrimary }]}
+                >
+                  Inventario valorizado
+                </Text>
+                <Text
+                  style={[styles.exportSub, { color: colors.textMuted }]}
+                >
+                  {productos.length} productos ·{' '}
+                  {formatCurrency(
+                    productos.reduce(
+                      (s, p) => s + p.stock * parseFloat(p.precio_compra),
+                      0,
+                    ),
                   )}
                 </Text>
               </View>
@@ -435,19 +533,41 @@ export default function ReportesScreen(): React.ReactElement {
             </View>
           </Card>
 
-          {/* Exportar Cartera */}
           {cartera ? (
             <>
-              <Text style={styles.sectionLabel}>EXPORTAR CARTERA</Text>
+              <Text
+                style={[styles.sectionLabel, { color: colors.textMuted }]}
+              >
+                EXPORTAR CARTERA
+              </Text>
               <Card variant="default" style={styles.exportCard}>
                 <View style={styles.exportRow}>
-                  <View style={styles.exportIconWrap}>
-                    <MaterialCommunityIcons name="account-cash" size={24} color={colors.warning} />
+                  <View
+                    style={[
+                      styles.exportIconWrap,
+                      { backgroundColor: colors.bgSubtle },
+                    ]}
+                  >
+                    <MaterialCommunityIcons
+                      name="account-cash"
+                      size={24}
+                      color={colors.warning}
+                    />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.exportTitle}>Deudas por cobrar</Text>
-                    <Text style={styles.exportSub}>
-                      {cartera.clientes.length} clientes · {formatCurrency(cartera.total_cartera)}
+                    <Text
+                      style={[
+                        styles.exportTitle,
+                        { color: colors.textPrimary },
+                      ]}
+                    >
+                      Deudas por cobrar
+                    </Text>
+                    <Text
+                      style={[styles.exportSub, { color: colors.textMuted }]}
+                    >
+                      {cartera.clientes.length} clientes ·{' '}
+                      {formatCurrency(cartera.total_cartera)}
                     </Text>
                   </View>
                 </View>
@@ -481,8 +601,9 @@ export default function ReportesScreen(): React.ReactElement {
             </>
           ) : null}
 
-          {/* Gráfico ventas */}
-          <Text style={styles.sectionLabel}>VENTAS ÚLTIMOS DÍAS</Text>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>
+            VENTAS ÚLTIMOS DÍAS
+          </Text>
           {hayDatosGrafico ? (
             <LineChartCard
               title="Ventas por día"
@@ -493,73 +614,192 @@ export default function ReportesScreen(): React.ReactElement {
               formatValue={(v) => formatCurrency(v)}
             />
           ) : (
-            <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>Sin datos suficientes</Text>
+            <View
+              style={[
+                styles.emptyBox,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+                Sin datos suficientes
+              </Text>
             </View>
           )}
 
-          {/* Top productos */}
-          <Text style={styles.sectionLabel}>TOP PRODUCTOS</Text>
+          <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>
+            TOP PRODUCTOS
+          </Text>
           {topProductos.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Text style={styles.emptyText}>Sin ventas registradas</Text>
+            <View
+              style={[
+                styles.emptyBox,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>
+                Sin ventas registradas
+              </Text>
             </View>
           ) : (
-            <View style={styles.listBox}>
+            <View
+              style={[
+                styles.listBox,
+                {
+                  backgroundColor: colors.surface,
+                  borderColor: colors.border,
+                },
+              ]}
+            >
               {topProductos.map((p, idx) => (
                 <View
                   key={p.id}
                   style={[
                     styles.topRow,
-                    idx === topProductos.length - 1 ? styles.topRowLast : null,
+                    { borderBottomColor: colors.border },
+                    idx === topProductos.length - 1
+                      ? styles.topRowLast
+                      : null,
                   ]}
                 >
-                  <View style={styles.rank}>
-                    <Text style={styles.rankText}>{idx + 1}</Text>
+                  <View
+                    style={[
+                      styles.rank,
+                      { backgroundColor: colors.bgSubtle },
+                    ]}
+                  >
+                    <Text
+                      style={[styles.rankText, { color: colors.textPrimary }]}
+                    >
+                      {idx + 1}
+                    </Text>
                   </View>
                   <View style={{ flex: 1, marginLeft: spacing.md }}>
-                    <Text style={styles.topNombre} numberOfLines={1}>{p.nombre}</Text>
-                    <Text style={styles.topSub}>{p.unidades_vendidas} und · {formatCurrency(p.monto_total)}</Text>
+                    <Text
+                      style={[styles.topNombre, { color: colors.textPrimary }]}
+                      numberOfLines={1}
+                    >
+                      {p.nombre}
+                    </Text>
+                    <Text style={[styles.topSub, { color: colors.textMuted }]}>
+                      {p.unidades_vendidas} und ·{' '}
+                      {formatCurrency(p.monto_total)}
+                    </Text>
                   </View>
                 </View>
               ))}
             </View>
           )}
 
-          {/* Cartera */}
           {cartera ? (
             <>
-              <Text style={styles.sectionLabel}>CARTERA POR CLIENTE</Text>
-              <View style={styles.carteraTotal}>
-                <Text style={styles.carteraTotalLabel}>Total por cobrar</Text>
-                <Text style={styles.carteraTotalValue}>{formatCurrency(cartera.total_cartera)}</Text>
+              <Text
+                style={[styles.sectionLabel, { color: colors.textMuted }]}
+              >
+                CARTERA POR CLIENTE
+              </Text>
+              <View
+                style={[
+                  styles.carteraTotal,
+                  { backgroundColor: colors.dangerSubtle },
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.carteraTotalLabel,
+                    { color: colors.dangerText },
+                  ]}
+                >
+                  Total por cobrar
+                </Text>
+                <Text
+                  style={[
+                    styles.carteraTotalValue,
+                    { color: colors.danger },
+                  ]}
+                >
+                  {formatCurrency(cartera.total_cartera)}
+                </Text>
               </View>
               {cartera.clientes.length === 0 ? (
-                <View style={styles.emptyBox}>
-                  <Text style={styles.emptyText}>Sin deudas pendientes</Text>
+                <View
+                  style={[
+                    styles.emptyBox,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  <Text
+                    style={[styles.emptyText, { color: colors.textMuted }]}
+                  >
+                    Sin deudas pendientes
+                  </Text>
                 </View>
               ) : (
-                <View style={styles.listBox}>
+                <View
+                  style={[
+                    styles.listBox,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
                   {cartera.clientes.slice(0, 10).map((c, idx) => (
                     <View
                       key={c.id}
                       style={[
                         styles.topRow,
-                        idx === cartera.clientes.length - 1 ? styles.topRowLast : null,
+                        { borderBottomColor: colors.border },
+                        idx === cartera.clientes.length - 1
+                          ? styles.topRowLast
+                          : null,
                       ]}
                     >
-                      <View style={styles.avatarSmall}>
-                        <Text style={styles.avatarSmallText}>
+                      <View
+                        style={[
+                          styles.avatarSmall,
+                          { backgroundColor: colors.primary },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.avatarSmallText,
+                            { color: colors.textInverse },
+                          ]}
+                        >
                           {c.nombre.charAt(0).toUpperCase()}
                         </Text>
                       </View>
                       <View style={{ flex: 1, marginLeft: spacing.md }}>
-                        <Text style={styles.topNombre} numberOfLines={1}>{c.nombre}</Text>
-                        <Text style={styles.topSub}>
-                          Cupo {formatCurrency(c.cupo_credito)} · Disp {formatCurrency(c.cupo_disponible)}
+                        <Text
+                          style={[
+                            styles.topNombre,
+                            { color: colors.textPrimary },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {c.nombre}
+                        </Text>
+                        <Text
+                          style={[styles.topSub, { color: colors.textMuted }]}
+                        >
+                          Cupo {formatCurrency(c.cupo_credito)} · Disp{' '}
+                          {formatCurrency(c.cupo_disponible)}
                         </Text>
                       </View>
-                      <Badge label={formatCurrency(c.saldo_deuda)} variant="danger" size="sm" />
+                      <Badge
+                        label={formatCurrency(c.saldo_deuda)}
+                        variant="danger"
+                        size="sm"
+                      />
                     </View>
                   ))}
                 </View>
@@ -569,12 +809,23 @@ export default function ReportesScreen(): React.ReactElement {
         </ScrollView>
       )}
 
-      {/* Overlay de exportación */}
       {exportando ? (
-        <View style={styles.overlay}>
-          <View style={styles.overlayCard}>
+        <View
+          style={[
+            styles.overlay,
+            { backgroundColor: 'rgba(0,0,0,0.5)' },
+          ]}
+        >
+          <View
+            style={[
+              styles.overlayCard,
+              { backgroundColor: colors.surface },
+            ]}
+          >
             <ActivityIndicator size="large" color={colors.textPrimary} />
-            <Text style={styles.overlayText}>Generando reporte...</Text>
+            <Text style={[styles.overlayText, { color: colors.textPrimary }]}>
+              Generando reporte...
+            </Text>
           </View>
         </View>
       ) : null}
@@ -582,59 +833,194 @@ export default function ReportesScreen(): React.ReactElement {
   );
 }
 
-function PeriodoBtn(props: { label: string; active: boolean; onPress: () => void }): React.ReactElement {
+function PeriodoBtn(props: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}): React.ReactElement {
+  const colors = useColors();
+
   return (
-    <Pressable onPress={props.onPress} style={[styles.periodoBtn, props.active ? styles.periodoBtnActive : null]}>
-      <Text style={[styles.periodoLabel, props.active ? styles.periodoLabelActive : null]}>{props.label}</Text>
+    <Pressable
+      onPress={props.onPress}
+      style={[
+        styles.periodoBtn,
+        {
+          backgroundColor: props.active ? colors.primary : colors.surface,
+          borderColor: props.active ? colors.primary : colors.border,
+        },
+      ]}
+    >
+      <Text
+        style={[
+          styles.periodoLabel,
+          {
+            color: props.active ? colors.textInverse : colors.textSecondary,
+          },
+          props.active ? styles.periodoLabelActive : null,
+        ]}
+      >
+        {props.label}
+      </Text>
     </Pressable>
   );
 }
 
-function KpiCard(props: { label: string; value: string; sub: string; valueColor?: string }): React.ReactElement {
+function KpiCard(props: {
+  label: string;
+  value: string;
+  sub: string;
+  valueColor?: string;
+}): React.ReactElement {
+  const colors = useColors();
+
   return (
-    <View style={styles.kpiCard}>
-      <Text style={styles.kpiLabel}>{props.label}</Text>
-      <Text style={[styles.kpiValue, props.valueColor ? { color: props.valueColor } : null]} numberOfLines={1}>{props.value}</Text>
-      <Text style={styles.kpiSub} numberOfLines={1}>{props.sub}</Text>
+    <View
+      style={[
+        styles.kpiCard,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+        },
+      ]}
+    >
+      <Text style={[styles.kpiLabel, { color: colors.textSecondary }]}>
+        {props.label}
+      </Text>
+      <Text
+        style={[
+          styles.kpiValue,
+          { color: props.valueColor ?? colors.textPrimary },
+        ]}
+        numberOfLines={1}
+      >
+        {props.value}
+      </Text>
+      <Text style={[styles.kpiSub, { color: colors.textMuted }]} numberOfLines={1}>
+        {props.sub}
+      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
+  safe: { flex: 1 },
   scroll: { padding: spacing.lg, paddingBottom: spacing.giant },
-  periodoRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
-  periodoBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: spacing.sm, borderRadius: radius.md, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  periodoBtnActive: { backgroundColor: colors.primary, borderColor: colors.primary },
-  periodoLabel: { ...typography.small, color: colors.textSecondary },
-  periodoLabelActive: { color: colors.textInverse, fontFamily: typography.button.fontFamily },
-  kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg },
-  kpiCard: { width: '48%', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, padding: spacing.md },
-  kpiLabel: { ...typography.small, color: colors.textSecondary },
-  kpiValue: { ...typography.price, color: colors.textPrimary, marginTop: spacing.xs },
-  kpiSub: { ...typography.small, color: colors.textMuted, marginTop: 2 },
-  sectionLabel: { ...typography.overline, color: colors.textMuted, marginTop: spacing.xl, marginBottom: spacing.md },
+  periodoRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  periodoBtn: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    borderWidth: 1,
+  },
+  periodoLabel: { ...typography.small },
+  periodoLabelActive: { fontFamily: typography.button.fontFamily },
+  kpiGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  kpiCard: {
+    width: '48%',
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+  },
+  kpiLabel: { ...typography.small },
+  kpiValue: { ...typography.price, marginTop: spacing.xs },
+  kpiSub: { ...typography.small, marginTop: 2 },
+  sectionLabel: {
+    ...typography.overline,
+    marginTop: spacing.xl,
+    marginBottom: spacing.md,
+  },
   exportCard: { marginBottom: spacing.sm },
-  exportRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
-  exportIconWrap: { width: 40, height: 40, borderRadius: radius.md, backgroundColor: colors.bgSubtle, alignItems: 'center', justifyContent: 'center' },
-  exportTitle: { ...typography.bodyBold, color: colors.textPrimary },
-  exportSub: { ...typography.small, color: colors.textMuted, marginTop: 2 },
+  exportRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  exportIconWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  exportTitle: { ...typography.bodyBold },
+  exportSub: { ...typography.small, marginTop: 2 },
   exportBtns: { flexDirection: 'row', gap: spacing.sm },
-  emptyBox: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, padding: spacing.lg, alignItems: 'center' },
-  emptyText: { ...typography.caption, color: colors.textMuted },
-  listBox: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, overflow: 'hidden' },
-  topRow: { flexDirection: 'row', alignItems: 'center', padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  emptyBox: {
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: spacing.lg,
+    alignItems: 'center',
+  },
+  emptyText: { ...typography.caption },
+  listBox: {
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+  },
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: spacing.md,
+    borderBottomWidth: 1,
+  },
   topRowLast: { borderBottomWidth: 0 },
-  rank: { width: 28, height: 28, borderRadius: 14, backgroundColor: colors.bgSubtle, alignItems: 'center', justifyContent: 'center' },
-  rankText: { ...typography.bodyBold, color: colors.textPrimary },
-  topNombre: { ...typography.bodyBold, color: colors.textPrimary },
-  topSub: { ...typography.small, color: colors.textMuted, marginTop: 2 },
-  carteraTotal: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: spacing.lg, backgroundColor: colors.dangerSubtle, borderRadius: radius.lg, marginBottom: spacing.md },
-  carteraTotalLabel: { ...typography.bodyBold, color: colors.dangerText },
-  carteraTotalValue: { ...typography.price, color: colors.danger },
-  avatarSmall: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
-  avatarSmallText: { ...typography.bodyBold, color: colors.textInverse },
-  overlay: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', zIndex: 999 },
-  overlayCard: { backgroundColor: colors.surface, padding: spacing.xxl, borderRadius: radius.lg, alignItems: 'center', gap: spacing.md, minWidth: 200 },
-  overlayText: { ...typography.bodyBold, color: colors.textPrimary },
+  rank: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rankText: { ...typography.bodyBold },
+  topNombre: { ...typography.bodyBold },
+  topSub: { ...typography.small, marginTop: 2 },
+  carteraTotal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    marginBottom: spacing.md,
+  },
+  carteraTotalLabel: { ...typography.bodyBold },
+  carteraTotalValue: { ...typography.price },
+  avatarSmall: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarSmallText: { ...typography.bodyBold },
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 999,
+  },
+  overlayCard: {
+    padding: spacing.xxl,
+    borderRadius: radius.lg,
+    alignItems: 'center',
+    gap: spacing.md,
+    minWidth: 200,
+  },
+  overlayText: { ...typography.bodyBold },
 });

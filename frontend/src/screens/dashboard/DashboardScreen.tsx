@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -6,24 +6,32 @@ import {
   ScrollView,
   RefreshControl,
   Pressable,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import * as Haptics from 'expo-haptics';
 
-import { colors, spacing, radius, typography } from '@theme/index';
+import { spacing, radius, typography } from '@theme/index';
 import { useAuthStore } from '@store/authStore';
+import { useColors } from '@hooks/useColors';
+import { useChartColors } from '@hooks/useChartColors';
+import { useReturnTo } from '@hooks/useReturnTo';
+import { useCajaResumen } from '@hooks/useCajaResumen';
 import { dashboardApi } from '@api/index';
 import { formatCurrency, formatDateTime } from '@utils/format';
 import type { DashboardAvanzado, DashboardPeriodo } from '@tipos/index';
 import Badge from '@components/ui/Badge';
 import AlertaStock from '@components/domain/AlertaStock';
 import Skeleton from '@components/ui/Skeleton';
-import EmptyState from '@components/ui/EmptyState';
+import ErrorState from '@components/feedback/ErrorState';
 import Chip from '@components/ui/Chip';
-import Tooltip from '@components/ui/Tooltip';
+import AppHeader from '@components/layout/AppHeader';
+import KpiHeroCard from '@components/ui/KpiHeroCard';
+import StatCard from '@components/ui/StatCard';
 import { LineChartCard, BarChartCard, DonutChartCard } from '@components/charts';
-import BusinessLogo from '@components/domain/BusinessLogo';
+import { StaggeredSection, ShineEffect, FadeInItem } from '@components/animations';
 
 const PERIODOS: { value: DashboardPeriodo; label: string }[] = [
   { value: 'hoy', label: 'Hoy' },
@@ -36,12 +44,17 @@ const PERIODOS: { value: DashboardPeriodo; label: string }[] = [
 export default function DashboardScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
   const user = useAuthStore((s) => s.user);
+  const colors = useColors();
+  const chartColors = useChartColors();
+  const goTo = useReturnTo();
 
   const [periodo, setPeriodo] = useState<DashboardPeriodo>('mes');
   const [data, setData] = useState<DashboardAvanzado | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const cajaResumen = useCajaResumen(data?.caja_abierta ?? null);
 
   const cargar = useCallback(async (): Promise<void> => {
     try {
@@ -64,56 +77,44 @@ export default function DashboardScreen(): React.ReactElement {
     }, [cargar]),
   );
 
-  const onRefresh = (): void => {
+  const onRefresh = async (): Promise<void> => {
+    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setRefreshing(true);
     void cargar();
   };
 
   const esAdmin = user?.rol === 'admin';
-  const nombre = user?.nombre?.split(' ')[0] ?? 'Usuario';
+
+  const sparkData = useMemo(() => {
+    if (!data) return [];
+    return data.ventas_por_dia.map((d) => parseFloat(d.monto_total) || 0);
+  }, [data]);
+
+  const totalPeriodo = data
+    ? parseFloat(data.kpis.ventas_periodo.actual.monto) || 0
+    : 0;
+
+  const gananciaMonto = data
+    ? parseFloat(data.kpis.ganancias_periodo.monto) || 0
+    : 0;
+
+  const ventasHoyMonto = data
+    ? parseFloat(data.kpis.ventas_hoy.monto) || 0
+    : 0;
+
+  const carteraTotal = data
+    ? parseFloat(data.kpis.cartera_total.total) || 0
+    : 0;
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.header}>
-        <BusinessLogo size={36} style={styles.businessLogo} />
-        <View style={{ flex: 1 }}>
-          <Text style={styles.greeting}>Hola, {nombre}</Text>
-          <View style={styles.dateRow}>
-            <Text style={styles.date}>Resumen de tu tienda</Text>
-            <Tooltip
-              title="Cómo interpretar el dashboard"
-              text="El % verde/rojo compara el período actual con el anterior. Cambia el período con los chips de arriba. Los gráficos se actualizan en tiempo real."
-            />
-          </View>
-        </View>
-        <Pressable
-          onPress={() => navigation.navigate('BusquedaGlobal')}
-          style={({ pressed }) => [
-            styles.profileBtn,
-            pressed ? styles.profileBtnPressed : null,
-          ]}
-        >
-          <MaterialCommunityIcons
-            name="magnify"
-            size={20}
-            color={colors.textPrimary}
-          />
-        </Pressable>
-        <Pressable
-          onPress={() => navigation.navigate('Mas')}
-          style={({ pressed }) => [
-            styles.profileBtn,
-            { marginLeft: spacing.sm },
-            pressed ? styles.profileBtnPressed : null,
-          ]}
-        >
-          <MaterialCommunityIcons
-            name="account-outline"
-            size={20}
-            color={colors.textPrimary}
-          />
-        </Pressable>
-      </View>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+      edges={['top']}
+    >
+      <AppHeader
+        subtitle="Resumen de tu tienda"
+        unreadCount={data?.notificaciones_no_leidas ?? 0}
+      />
 
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -126,366 +127,577 @@ export default function DashboardScreen(): React.ReactElement {
         }
         showsVerticalScrollIndicator={false}
       >
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.periodosRow}
-          style={styles.periodosScroll}
-        >
-          {PERIODOS.map((p) => (
-            <Chip
-              key={p.value}
-              label={p.label}
-              active={periodo === p.value}
-              onPress={() => setPeriodo(p.value)}
-            />
-          ))}
-        </ScrollView>
+        {/* Periodo selector */}
+        <StaggeredSection delay={0}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.periodosRow}
+            style={styles.periodosScroll}
+          >
+            {PERIODOS.map((p) => (
+              <Chip
+                key={p.value}
+                label={p.label}
+                active={periodo === p.value}
+                onPress={() => {
+                  void Haptics.selectionAsync();
+                  setPeriodo(p.value);
+                }}
+              />
+            ))}
+          </ScrollView>
+        </StaggeredSection>
 
         {loading && !data ? (
           <DashboardSkeleton />
         ) : error ? (
-          <EmptyState
-            icon="alert-circle-outline"
-            title="No se pudo cargar"
-            description={error}
-            actionLabel="Reintentar"
-            onAction={() => {
+          <ErrorState
+            title="No pudimos cargar el dashboard"
+            message="Revisa tu conexión e intenta de nuevo."
+            technicalMessage={error}
+            onRetry={() => {
               setLoading(true);
               void cargar();
             }}
           />
         ) : data ? (
           <>
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>VENTAS DEL PERÍODO</Text>
+            {/* ============ KPI HERO ============ */}
+            <StaggeredSection delay={80}>
+              <View style={styles.section}>
+                <ShineEffect borderRadius={radius.lg} delay={400}>
+                  <KpiHeroCard
+                    label="Vendido en el período"
+                    value={totalPeriodo}
+                    formatValue={(v) => formatCurrency(v)}
+                    subtitle={`${data.kpis.ventas_periodo.actual.cantidad} transacciones · Ticket ${formatCurrency(data.kpis.ticket_promedio.valor)}`}
+                    trend={{
+                      direction: data.kpis.ventas_periodo.cambio.direccion,
+                      percentage:
+                        data.kpis.ventas_periodo.cambio.porcentaje,
+                    }}
+                    sparkData={sparkData}
+                    sparkColor={chartColors.primary}
+                  />
+                </ShineEffect>
+              </View>
+            </StaggeredSection>
 
-              <View style={styles.kpiFeatured}>
-                <View style={styles.kpiFeaturedHeader}>
-                  <Text style={styles.kpiFeaturedLabel}>Total vendido</Text>
-                  <KpiChangeBadge
-                    direccion={data.kpis.ventas_periodo.cambio.direccion}
-                    porcentaje={data.kpis.ventas_periodo.cambio.porcentaje}
+            {/* ============ GRID DE STATS ============ */}
+            <StaggeredSection delay={160}>
+              <View style={styles.section}>
+                <Text
+                  style={[styles.sectionLabel, { color: colors.textMuted }]}
+                >
+                  RESUMEN
+                </Text>
+
+                <View style={styles.grid}>
+                  <StatCard
+                    icon="cash"
+                    label="Ventas hoy"
+                    value={ventasHoyMonto}
+                    formatValue={(v) => formatCurrency(v)}
+                    subtitle={`${data.kpis.ventas_hoy.cantidad} ${
+                      data.kpis.ventas_hoy.cantidad === 1 ? 'venta' : 'ventas'
+                    }`}
+                    tone="wine"
+                  />
+
+                  <StatCard
+                    icon="trending-up"
+                    label="Ganancia est."
+                    value={gananciaMonto}
+                    formatValue={(v) => formatCurrency(v)}
+                    subtitle={`Margen ${data.kpis.ganancias_periodo.margen_porcentaje}%`}
+                    tone={gananciaMonto < 0 ? 'berry' : 'primary'}
+                  />
+
+                  <StatCard
+                    icon="account-cash-outline"
+                    label="Cartera"
+                    value={carteraTotal}
+                    formatValue={(v) => formatCurrency(v)}
+                    subtitle={`${data.kpis.cartera_total.clientes} clientes`}
+                    tone={carteraTotal > 0 ? 'plum' : 'primary'}
+                  />
+
+                  <StatCard
+                    icon="alert-outline"
+                    label="Stock bajo"
+                    value={data.kpis.alertas_stock}
+                    formatValue={(v) => String(Math.round(v))}
+                    subtitle="Requieren reposición"
+                    tone={data.kpis.alertas_stock > 0 ? 'berry' : 'primary'}
                   />
                 </View>
-                <Text style={styles.kpiFeaturedValue}>
-                  {formatCurrency(data.kpis.ventas_periodo.actual.monto)}
-                </Text>
-                <Text style={styles.kpiFeaturedSub}>
-                  {data.kpis.ventas_periodo.actual.cantidad} transacciones ·{' '}
-                  Ticket promedio{' '}
-                  {formatCurrency(data.kpis.ticket_promedio.valor)}
-                </Text>
-                <View style={styles.gananciaRow}>
-                  <View style={styles.gananciaInfo}>
-                    <Text style={styles.gananciaLabel}>
-                      Ganancia bruta estimada
-                    </Text>
-                    <Text style={styles.gananciaSub}>
-                      Margen {data.kpis.ganancias_periodo.margen_porcentaje}% ·
-                      según costo de compra actual
-                    </Text>
-                  </View>
-                  <Text
-                    style={[
-                      styles.gananciaValue,
-                      parseFloat(data.kpis.ganancias_periodo.monto) < 0
-                        ? styles.gananciaNegativa
-                        : null,
+              </View>
+            </StaggeredSection>
+
+            {/* ============ CAJA ABIERTA ============ */}
+            {data.caja_abierta ? (
+              <StaggeredSection delay={240}>
+                <View style={styles.section}>
+                  <Pressable
+                    onPress={() => {
+                      void Haptics.selectionAsync();
+                      goTo('Mas', 'Caja');
+                    }}
+                    style={({ pressed }) => [
+                      styles.cajaCard,
+                      {
+                        backgroundColor: colors.chartPlumSubtle,
+                        borderColor: colors.chartPlum,
+                      },
+                      pressed ? { opacity: 0.94 } : null,
                     ]}
                   >
-                    {formatCurrency(data.kpis.ganancias_periodo.monto)}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.kpiGrid}>
-                <KpiCard
-                  label="Hoy"
-                  value={formatCurrency(data.kpis.ventas_hoy.monto)}
-                  sub={`${data.kpis.ventas_hoy.cantidad} ventas`}
-                />
-                <KpiCard
-                  label="Clientes nuevos"
-                  value={String(data.kpis.clientes_nuevos)}
-                  sub="En este período"
-                />
-                <KpiCard
-                  label="Productos activos"
-                  value={String(data.kpis.productos_activos)}
-                  sub="En catálogo"
-                />
-                <KpiCard
-                  label="Stock bajo"
-                  value={String(data.kpis.alertas_stock)}
-                  sub="Requieren reposición"
-                  valueColor={
-                    data.kpis.alertas_stock > 0 ? colors.warning : undefined
-                  }
-                />
-              </View>
-            </View>
-
-            {data.caja_abierta ? (
-              <Pressable
-                onPress={() => navigation.navigate('Mas', { screen: 'Caja' })}
-                style={({ pressed }) => [
-                  styles.cajaCard,
-                  pressed ? styles.cajaCardPressed : null,
-                ]}
-              >
-                <View style={styles.cajaHeader}>
-                  <View style={styles.cajaIcon}>
-                    <MaterialCommunityIcons
-                      name="cash-register"
-                      size={20}
-                      color={colors.success}
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.cajaTitle}>Caja abierta</Text>
-                    <Text style={styles.cajaSub}>
-                      Desde {formatDateTime(data.caja_abierta.abierta_at)}
-                    </Text>
-                  </View>
-                  <MaterialCommunityIcons
-                    name="chevron-right"
-                    size={20}
-                    color={colors.textMuted}
-                  />
-                </View>
-                <View style={styles.cajaTotales}>
-                  <CajaTotal
-                    label="Apertura"
-                    value={data.caja_abierta.monto_apertura}
-                  />
-                  <CajaTotal
-                    label="Efectivo"
-                    value={data.caja_abierta.efectivo}
-                  />
-                  <CajaTotal
-                    label="Turno"
-                    value={data.caja_abierta.total_turno}
-                    highlight
-                  />
-                </View>
-              </Pressable>
-            ) : null}
-
-            {data.kpis.alertas_stock > 0 ? (
-              <View style={styles.alertSection}>
-                <AlertaStock
-                  cantidad={data.kpis.alertas_stock}
-                  onPress={() =>
-                    navigation.navigate('Mas', { screen: 'Inventario' })
-                  }
-                />
-              </View>
-            ) : null}
-
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>TENDENCIA DE VENTAS</Text>
-              <LineChartCard
-                title="Ventas por día"
-                subtitle={`Del ${data.periodo.desde} al ${data.periodo.hasta}`}
-                data={data.ventas_por_dia.map((d) => ({
-                  label: d.dia.slice(5),
-                  value: parseFloat(d.monto_total) || 0,
-                }))}
-                formatValue={(v) => formatCurrency(v)}
-              />
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>VENTAS POR HORA</Text>
-              <BarChartCard
-                title="Horas más activas"
-                subtitle="Distribución de ventas del día"
-                data={data.ventas_por_hora.map((h) => ({
-                  label: h.label.slice(0, 2),
-                  value: parseFloat(h.monto) || 0,
-                }))}
-                formatValue={(v) => {
-                  if (v >= 1000) return `${(v / 1000).toFixed(0)}k`;
-                  return String(Math.round(v));
-                }}
-              />
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>MÉTODOS DE PAGO</Text>
-              <DonutChartCard
-                title="Distribución"
-                data={data.metodos_pago.map((m, idx) => ({
-                  label: m.label,
-                  value: parseFloat(m.monto) || 0,
-                  color:
-                    idx === 0
-                      ? colors.accent
-                      : idx === 1
-                        ? colors.success
-                        : colors.warning,
-                }))}
-              />
-            </View>
-
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>TOP PRODUCTOS</Text>
-              {data.top_productos.length === 0 ? (
-                <View style={styles.emptySmall}>
-                  <Text style={styles.emptySmallText}>
-                    Sin ventas en este período
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.listBox}>
-                  {data.top_productos.map((p, idx) => {
-                    const maxMonto = parseFloat(
-                      data.top_productos[0].monto_total,
-                    );
-                    const pct =
-                      maxMonto > 0
-                        ? (parseFloat(p.monto_total) / maxMonto) * 100
-                        : 0;
-
-                    return (
+                    <View style={styles.cajaHeader}>
                       <View
-                        key={p.id}
                         style={[
-                          styles.topRow,
-                          idx === data.top_productos.length - 1
-                            ? styles.topRowLast
-                            : null,
+                          styles.cajaIcon,
+                          { backgroundColor: colors.surface },
                         ]}
                       >
-                        <View style={styles.rank}>
-                          <Text style={styles.rankText}>{idx + 1}</Text>
-                        </View>
-                        <View style={{ flex: 1, marginLeft: spacing.md }}>
-                          <Text style={styles.topNombre} numberOfLines={1}>
-                            {p.nombre}
-                          </Text>
-                          <View style={styles.progressWrap}>
+                        <MaterialCommunityIcons
+                          name="cash-register"
+                          size={18}
+                          color={colors.chartPlum}
+                        />
+                      </View>
+
+                      <View style={{ flex: 1 }}>
+                        <Text
+                          style={[
+                            styles.cajaTitle,
+                            { color: colors.chartPlum },
+                          ]}
+                        >
+                          Caja abierta
+                        </Text>
+
+                        <Text
+                          style={[
+                            styles.cajaSub,
+                            { color: colors.chartPlum, opacity: 0.7 },
+                          ]}
+                        >
+                          Desde {formatDateTime(data.caja_abierta.abierta_at)}
+                        </Text>
+                      </View>
+
+                      <MaterialCommunityIcons
+                        name="arrow-right"
+                        size={18}
+                        color={colors.chartPlum}
+                      />
+                    </View>
+
+                    <View style={styles.cajaTotales}>
+                      <CajaTotal
+                        label="Apertura"
+                        value={formatCurrency(cajaResumen.apertura)}
+                        textColor={colors.chartPlum}
+                      />
+
+                      <CajaTotal
+                        label="Ventas"
+                        value={formatCurrency(cajaResumen.ventasTotal)}
+                        textColor={colors.chartPlum}
+                        highlight
+                      />
+
+                      <CajaTotal
+                        label="Efectivo"
+                        value={formatCurrency(cajaResumen.efectivo)}
+                        textColor={colors.chartPlum}
+                      />
+                    </View>
+                  </Pressable>
+                </View>
+              </StaggeredSection>
+            ) : null}
+
+            {/* ============ ALERTA STOCK ============ */}
+            {data.kpis.alertas_stock > 0 ? (
+              <StaggeredSection delay={320}>
+                <View style={styles.alertSection}>
+                  <AlertaStock
+                    cantidad={data.kpis.alertas_stock}
+                    onPress={() => goTo('Mas', 'Inventario')}
+                  />
+                </View>
+              </StaggeredSection>
+            ) : null}
+
+            {/* ============ CHARTS ============ */}
+            <StaggeredSection delay={400}>
+              <View style={styles.section}>
+                <Text
+                  style={[styles.sectionLabel, { color: colors.textMuted }]}
+                >
+                  TENDENCIA
+                </Text>
+
+                <LineChartCard
+                  title="Ventas por día"
+                  subtitle={`Del ${data.periodo.desde} al ${data.periodo.hasta}`}
+                  data={data.ventas_por_dia.map((d) => ({
+                    label: d.dia.slice(5),
+                    value: parseFloat(d.monto_total) || 0,
+                  }))}
+                  formatValue={(v) => formatCurrency(v)}
+                  color={chartColors.wine}
+                />
+              </View>
+            </StaggeredSection>
+
+            <StaggeredSection delay={480}>
+              <View style={styles.section}>
+                <BarChartCard
+                  title="Ventas por hora"
+                  subtitle="Distribución de hoy"
+                  data={data.ventas_por_hora.map((h) => ({
+                    label: h.label.slice(0, 2),
+                    value: parseFloat(h.monto) || 0,
+                  }))}
+                  formatValue={(v) => {
+                    if (v >= 1000) return `${(v / 1000).toFixed(0)}k`;
+                    return String(Math.round(v));
+                  }}
+                  color={chartColors.plum}
+                />
+              </View>
+            </StaggeredSection>
+
+            <StaggeredSection delay={560}>
+              <View style={styles.section}>
+                <DonutChartCard
+                  title="Métodos de pago"
+                  data={data.metodos_pago.map((m, idx) => ({
+                    label: m.label,
+                    value: parseFloat(m.monto) || 0,
+                    color:
+                      chartColors.series[idx % chartColors.series.length],
+                  }))}
+                  centerColor={chartColors.plum}
+                />
+              </View>
+            </StaggeredSection>
+
+            {/* ============ TOP PRODUCTOS ============ */}
+            <StaggeredSection delay={640}>
+              <View style={styles.section}>
+                <Text
+                  style={[styles.sectionLabel, { color: colors.textMuted }]}
+                >
+                  TOP PRODUCTOS
+                </Text>
+
+                {data.top_productos.length === 0 ? (
+                  <View
+                    style={[
+                      styles.emptySmall,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.emptySmallText,
+                        { color: colors.textMuted },
+                      ]}
+                    >
+                      Sin ventas en este período
+                    </Text>
+                  </View>
+                ) : (
+                  <View
+                    style={[
+                      styles.listBox,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    {data.top_productos.map((p, idx) => {
+                      const maxMonto = parseFloat(
+                        data.top_productos[0].monto_total,
+                      );
+
+                      const pct =
+                        maxMonto > 0
+                          ? (parseFloat(p.monto_total) / maxMonto) * 100
+                          : 0;
+
+                      const barColor =
+                        idx === 0
+                          ? chartColors.plum
+                          : idx === 1
+                            ? chartColors.wine
+                            : idx === 2
+                              ? chartColors.berry
+                              : chartColors.mauve;
+
+                      const rankBg =
+                        idx === 0
+                          ? chartColors.plumSubtle
+                          : colors.bgSubtle;
+
+                      const rankColor =
+                        idx === 0
+                          ? chartColors.plum
+                          : colors.textPrimary;
+
+                      return (
+                        <FadeInItem key={p.id} delay={700 + idx * 60}>
+                          <View
+                            style={[
+                              styles.topRow,
+                              { borderBottomColor: colors.border },
+                              idx === data.top_productos.length - 1
+                                ? styles.topRowLast
+                                : null,
+                            ]}
+                          >
                             <View
                               style={[
-                                styles.progressFill,
-                                { width: `${pct}%` },
+                                styles.rank,
+                                { backgroundColor: rankBg },
                               ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.rankText,
+                                  { color: rankColor },
+                                ]}
+                              >
+                                {idx + 1}
+                              </Text>
+                            </View>
+
+                            <View
+                              style={{ flex: 1, marginLeft: spacing.md }}
+                            >
+                              <Text
+                                style={[
+                                  styles.topNombre,
+                                  { color: colors.textPrimary },
+                                ]}
+                                numberOfLines={1}
+                              >
+                                {p.nombre}
+                              </Text>
+
+                              <View
+                                style={[
+                                  styles.progressWrap,
+                                  { backgroundColor: colors.bgSubtle },
+                                ]}
+                              >
+                                <AnimatedProgress
+                                  pct={pct}
+                                  color={barColor}
+                                  delay={700 + idx * 60}
+                                />
+                              </View>
+
+                              <Text
+                                style={[
+                                  styles.topSub,
+                                  { color: colors.textMuted },
+                                ]}
+                              >
+                                {p.unidades_vendidas} und ·{' '}
+                                {formatCurrency(p.monto_total)}
+                              </Text>
+                            </View>
+                          </View>
+                        </FadeInItem>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
+            </StaggeredSection>
+
+            {/* ============ ACCIONES RÁPIDAS ============ */}
+            <StaggeredSection delay={760}>
+              <View style={styles.section}>
+                <Text
+                  style={[styles.sectionLabel, { color: colors.textMuted }]}
+                >
+                  ACCESOS RÁPIDOS
+                </Text>
+
+                <View style={styles.quickGrid}>
+                  <QuickAction
+                    icon="cart-plus"
+                    label="Vender"
+                    onPress={() => navigation.navigate('Vender')}
+                  />
+
+                  <QuickAction
+                    icon="plus-circle-outline"
+                    label="Producto"
+                    onPress={() =>
+                      navigation.navigate('Productos', {
+                        screen: 'ProductoForm',
+                      })
+                    }
+                  />
+
+                  <QuickAction
+                    icon="swap-horizontal"
+                    label="Inventario"
+                    onPress={() => goTo('Mas', 'Inventario')}
+                  />
+
+                  <QuickAction
+                    icon={esAdmin ? 'chart-line' : 'account-group-outline'}
+                    label={esAdmin ? 'Reportes' : 'Clientes'}
+                    onPress={() =>
+                      goTo('Mas', esAdmin ? 'Reportes' : 'Clientes')
+                    }
+                  />
+                </View>
+              </View>
+            </StaggeredSection>
+
+            {/* ============ ÚLTIMAS VENTAS ============ */}
+            <StaggeredSection delay={840}>
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Text
+                    style={[styles.sectionLabel, { color: colors.textMuted }]}
+                  >
+                    ÚLTIMAS VENTAS
+                  </Text>
+
+                  <Pressable onPress={() => navigation.navigate('Ventas')}>
+                    <Text
+                      style={[styles.sectionLink, { color: colors.accent }]}
+                    >
+                      Ver todas
+                    </Text>
+                  </Pressable>
+                </View>
+
+                {data.ultimas_ventas.length === 0 ? (
+                  <View
+                    style={[
+                      styles.emptySmall,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.emptySmallText,
+                        { color: colors.textMuted },
+                      ]}
+                    >
+                      Aún no hay ventas registradas
+                    </Text>
+                  </View>
+                ) : (
+                  <View
+                    style={[
+                      styles.listBox,
+                      {
+                        backgroundColor: colors.surface,
+                        borderColor: colors.border,
+                      },
+                    ]}
+                  >
+                    {data.ultimas_ventas.map((v, idx) => (
+                      <FadeInItem key={v.id} delay={900 + idx * 50}>
+                        <Pressable
+                          style={({ pressed }) => [
+                            styles.saleRow,
+                            { borderBottomColor: colors.border },
+                            idx === data.ultimas_ventas.length - 1
+                              ? styles.saleRowLast
+                              : null,
+                            pressed
+                              ? { backgroundColor: colors.surfacePressed }
+                              : null,
+                          ]}
+                          onPress={() =>
+                            goTo('Ventas', 'VentaDetalle', { ventaId: v.id })
+                          }
+                        >
+                          <View
+                            style={[
+                              styles.saleIcon,
+                              { backgroundColor: colors.bgSubtle },
+                            ]}
+                          >
+                            <MaterialCommunityIcons
+                              name="receipt"
+                              size={16}
+                              color={colors.textSecondary}
                             />
                           </View>
-                          <Text style={styles.topSub}>
-                            {p.unidades_vendidas} und ·{' '}
-                            {formatCurrency(p.monto_total)}
-                          </Text>
-                        </View>
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
-            </View>
 
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>ACCIONES RÁPIDAS</Text>
-              <View style={styles.quickGrid}>
-                <QuickAction
-                  icon="cart-plus"
-                  label="Vender"
-                  onPress={() => navigation.navigate('Vender')}
-                />
-                <QuickAction
-                  icon="plus-circle-outline"
-                  label="Producto"
-                  onPress={() =>
-                    navigation.navigate('Productos', {
-                      screen: 'ProductoForm',
-                    })
-                  }
-                />
-                <QuickAction
-                  icon="swap-horizontal"
-                  label="Inventario"
-                  onPress={() =>
-                    navigation.navigate('Mas', { screen: 'Inventario' })
-                  }
-                />
-                <QuickAction
-                  icon={esAdmin ? 'chart-line' : 'account-group-outline'}
-                  label={esAdmin ? 'Reportes' : 'Clientes'}
-                  onPress={() =>
-                    navigation.navigate('Mas', {
-                      screen: esAdmin ? 'Reportes' : 'Clientes',
-                    })
-                  }
-                />
+                          <View style={styles.saleInfo}>
+                            <Text
+                              style={[
+                                styles.saleNumero,
+                                { color: colors.textPrimary },
+                              ]}
+                            >
+                              {v.numero}
+                            </Text>
+
+                            <Text
+                              style={[
+                                styles.saleCliente,
+                                { color: colors.textMuted },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {v.cliente_nombre ?? 'Consumidor final'}
+                            </Text>
+                          </View>
+
+                          <View style={styles.saleRight}>
+                            <Text
+                              style={[
+                                styles.saleTotal,
+                                { color: colors.textPrimary },
+                              ]}
+                            >
+                              {formatCurrency(v.total)}
+                            </Text>
+
+                            <Badge
+                              label={
+                                v.tipo_pago === 'credito'
+                                  ? 'Crédito'
+                                  : 'Contado'
+                              }
+                              variant={
+                                v.tipo_pago === 'credito'
+                                  ? 'warning'
+                                  : 'neutral'
+                              }
+                              size="sm"
+                            />
+                          </View>
+                        </Pressable>
+                      </FadeInItem>
+                    ))}
+                  </View>
+                )}
               </View>
-            </View>
-
-            <View style={styles.section}>
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionLabel}>ÚLTIMAS VENTAS</Text>
-                <Pressable onPress={() => navigation.navigate('Ventas')}>
-                  <Text style={styles.sectionLink}>Ver todas</Text>
-                </Pressable>
-              </View>
-
-              {data.ultimas_ventas.length === 0 ? (
-                <View style={styles.emptySmall}>
-                  <Text style={styles.emptySmallText}>
-                    Aún no hay ventas registradas
-                  </Text>
-                </View>
-              ) : (
-                <View style={styles.listBox}>
-                  {data.ultimas_ventas.map((v, idx) => (
-                    <Pressable
-                      key={v.id}
-                      style={({ pressed }) => [
-                        styles.saleRow,
-                        idx === data.ultimas_ventas.length - 1
-                          ? styles.saleRowLast
-                          : null,
-                        pressed ? styles.saleRowPressed : null,
-                      ]}
-                      onPress={() =>
-                        navigation.navigate('Ventas', {
-                          screen: 'VentaDetalle',
-                          params: { ventaId: v.id },
-                        })
-                      }
-                    >
-                      <View style={styles.saleIcon}>
-                        <MaterialCommunityIcons
-                          name="receipt"
-                          size={16}
-                          color={colors.textSecondary}
-                        />
-                      </View>
-                      <View style={styles.saleInfo}>
-                        <Text style={styles.saleNumero}>{v.numero}</Text>
-                        <Text style={styles.saleCliente} numberOfLines={1}>
-                          {v.cliente_nombre ?? 'Consumidor final'}
-                        </Text>
-                      </View>
-                      <View style={styles.saleRight}>
-                        <Text style={styles.saleTotal}>
-                          {formatCurrency(v.total)}
-                        </Text>
-                        <Badge
-                          label={
-                            v.tipo_pago === 'credito' ? 'Crédito' : 'Contado'
-                          }
-                          variant={
-                            v.tipo_pago === 'credito' ? 'warning' : 'neutral'
-                          }
-                          size="sm"
-                        />
-                      </View>
-                    </Pressable>
-                  ))}
-                </View>
-              )}
-            </View>
+            </StaggeredSection>
 
             <View style={{ height: spacing.xxl }} />
           </>
@@ -495,78 +707,69 @@ export default function DashboardScreen(): React.ReactElement {
   );
 }
 
-function KpiChangeBadge(props: {
-  direccion: 'up' | 'down' | 'flat';
-  porcentaje: number;
+/* ============================================================
+   Subcomponentes
+   ============================================================ */
+
+function AnimatedProgress({
+  pct,
+  color,
+  delay,
+}: {
+  pct: number;
+  color: string;
+  delay: number;
 }): React.ReactElement {
-  const isUp = props.direccion === 'up';
-  const isDown = props.direccion === 'down';
+  const width = React.useRef(new Animated.Value(0)).current;
 
-  const bg = isUp
-    ? colors.successSubtle
-    : isDown
-      ? colors.dangerSubtle
-      : colors.bgSubtle;
+  useEffect(() => {
+    Animated.timing(width, {
+      toValue: pct,
+      duration: 600,
+      delay,
+      useNativeDriver: false,
+    }).start();
+  }, [pct, delay, width]);
 
-  const text = isUp
-    ? colors.successText
-    : isDown
-      ? colors.dangerText
-      : colors.textMuted;
-
-  const icon = isUp ? 'trending-up' : isDown ? 'trending-down' : 'minus';
+  const widthInterpolated = width.interpolate({
+    inputRange: [0, 100],
+    outputRange: ['0%', '100%'],
+  });
 
   return (
-    <View style={[styles.changeBadge, { backgroundColor: bg }]}>
-      <MaterialCommunityIcons name={icon} size={14} color={text} />
-      <Text style={[styles.changeText, { color: text }]}>
-        {isUp ? '+' : ''}
-        {props.porcentaje.toFixed(1)}%
-      </Text>
-    </View>
-  );
-}
-
-function KpiCard(props: {
-  label: string;
-  value: string;
-  sub: string;
-  valueColor?: string;
-}): React.ReactElement {
-  return (
-    <View style={styles.kpiCard}>
-      <Text style={styles.kpiLabel}>{props.label}</Text>
-      <Text
-        style={[
-          styles.kpiValue,
-          props.valueColor ? { color: props.valueColor } : null,
-        ]}
-        numberOfLines={1}
-      >
-        {props.value}
-      </Text>
-      <Text style={styles.kpiSub} numberOfLines={1}>
-        {props.sub}
-      </Text>
-    </View>
+    <Animated.View
+      style={[
+        styles.progressFill,
+        {
+          width: widthInterpolated,
+          backgroundColor: color,
+        },
+      ]}
+    />
   );
 }
 
 function CajaTotal(props: {
   label: string;
   value: string;
+  textColor: string;
   highlight?: boolean;
 }): React.ReactElement {
   return (
     <View style={styles.cajaTotalItem}>
-      <Text style={styles.cajaTotalLabel}>{props.label}</Text>
+      <Text style={[styles.cajaTotalLabel, { color: props.textColor }]}>
+        {props.label}
+      </Text>
+
       <Text
         style={[
           styles.cajaTotalValue,
+          { color: props.textColor },
           props.highlight ? styles.cajaTotalHighlight : null,
         ]}
+        numberOfLines={1}
       >
-        {formatCurrency(props.value)}
+        {props.value}
       </Text>
     </View>
   );
@@ -577,45 +780,119 @@ function QuickAction(props: {
   label: string;
   onPress: () => void;
 }): React.ReactElement {
+  const colors = useColors();
+  const scale = React.useRef(new Animated.Value(1)).current;
+
+  const onPressIn = () => {
+    Animated.spring(scale, {
+      toValue: 0.94,
+      useNativeDriver: true,
+      damping: 15,
+      stiffness: 400,
+    }).start();
+  };
+
+  const onPressOut = () => {
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+      damping: 15,
+      stiffness: 400,
+    }).start();
+  };
+
   return (
-    <Pressable
-      onPress={props.onPress}
-      style={({ pressed }) => [
-        styles.quickAction,
-        pressed ? styles.quickActionPressed : null,
-      ]}
-    >
-      <MaterialCommunityIcons
-        name={props.icon}
-        size={22}
-        color={colors.textPrimary}
-      />
-      <Text style={styles.quickLabel}>{props.label}</Text>
-    </Pressable>
+    <Animated.View style={[{ flex: 1, transform: [{ scale }] }]}>
+      <Pressable
+        onPress={props.onPress}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        style={[
+          styles.quickAction,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <View
+          style={[
+            styles.quickIcon,
+            { backgroundColor: colors.bgSubtle },
+          ]}
+        >
+          <MaterialCommunityIcons
+            name={props.icon}
+            size={20}
+            color={colors.textPrimary}
+          />
+        </View>
+
+        <Text style={[styles.quickLabel, { color: colors.textPrimary }]}>
+          {props.label}
+        </Text>
+      </Pressable>
+    </Animated.View>
   );
 }
 
 function DashboardSkeleton(): React.ReactElement {
+  const colors = useColors();
+
   return (
-    <View style={{ padding: spacing.lg }}>
-      <Skeleton width="40%" height={14} style={{ marginBottom: spacing.md }} />
-      <Skeleton
-        width="100%"
-        height={100}
-        borderRadius={radius.lg}
-        style={{ marginBottom: spacing.lg }}
-      />
-      <View style={styles.kpiGrid}>
+    <View style={{ paddingHorizontal: spacing.lg }}>
+      <View
+        style={[
+          styles.skelHero,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+          },
+        ]}
+      >
+        <Skeleton width="40%" height={12} />
+
+        <Skeleton
+          width="60%"
+          height={32}
+          style={{ marginTop: spacing.md }}
+        />
+
+        <Skeleton
+          width="70%"
+          height={12}
+          style={{ marginTop: spacing.sm }}
+        />
+
+        <Skeleton
+          width="100%"
+          height={40}
+          style={{ marginTop: spacing.lg }}
+        />
+      </View>
+
+      <View style={styles.grid}>
         {[1, 2, 3, 4].map((i) => (
-          <View key={i} style={styles.kpiCard}>
-            <Skeleton width="40%" height={10} />
+          <View
+            key={i}
+            style={[
+              styles.skelStat,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <Skeleton width="60%" height={12} />
+
             <Skeleton
-              width="70%"
+              width="80%"
               height={22}
               style={{ marginTop: spacing.sm }}
             />
+
             <Skeleton
-              width="60%"
+              width="50%"
               height={10}
               style={{ marginTop: spacing.xs }}
             />
@@ -626,270 +903,253 @@ function DashboardSkeleton(): React.ReactElement {
   );
 }
 
+/* ============================================================
+   Estilos
+   ============================================================ */
+
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.md,
-  },
-  businessLogo: { marginRight: spacing.md },
-  greeting: { ...typography.h2, color: colors.textPrimary },
-  dateRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  date: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  profileBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: radius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  profileBtnPressed: { opacity: 0.7 },
-
+  safe: { flex: 1 },
   scroll: { paddingBottom: spacing.giant },
 
-  periodosScroll: { flexGrow: 0, maxHeight: 44, marginBottom: spacing.md },
+  periodosScroll: {
+    flexGrow: 0,
+    maxHeight: 44,
+    marginBottom: spacing.lg,
+    marginTop: spacing.md,
+  },
+
   periodosRow: {
     paddingHorizontal: spacing.lg,
     gap: spacing.sm,
     alignItems: 'center',
   },
 
-  section: { marginBottom: spacing.xxl, paddingHorizontal: spacing.lg },
+  section: {
+    marginBottom: spacing.xl,
+    paddingHorizontal: spacing.lg,
+  },
+
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: spacing.md,
   },
+
   sectionLabel: {
     ...typography.overline,
-    color: colors.textMuted,
     marginBottom: spacing.md,
   },
-  sectionLink: { ...typography.bodyBold, color: colors.accent },
 
-  kpiFeatured: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    marginBottom: spacing.md,
-  },
-  kpiFeaturedHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.sm,
-  },
-  kpiFeaturedLabel: { ...typography.small, color: colors.textSecondary },
-  kpiFeaturedValue: {
-    ...typography.display,
-    color: colors.textPrimary,
-    marginTop: 4,
-  },
-  kpiFeaturedSub: {
-    ...typography.small,
-    color: colors.textMuted,
-    marginTop: spacing.sm,
-  },
-  gananciaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    marginTop: spacing.md,
-    paddingTop: spacing.md,
-  },
-  gananciaInfo: { flex: 1 },
-  gananciaLabel: { ...typography.bodyBold, color: colors.textPrimary },
-  gananciaSub: { ...typography.tiny, color: colors.textMuted, marginTop: 3 },
-  gananciaValue: { ...typography.bodyBold, color: colors.success },
-  gananciaNegativa: { color: colors.danger },
-
-  changeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radius.pill,
-  },
-  changeText: {
-    ...typography.small,
-    fontFamily: typography.button.fontFamily,
+  sectionLink: {
+    ...typography.bodyBold,
   },
 
-  kpiGrid: {
+  grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.sm,
   },
-  kpiCard: {
-    flexBasis: '48%',
-    flexGrow: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
-  },
-  kpiLabel: { ...typography.small, color: colors.textSecondary },
-  kpiValue: {
-    ...typography.price,
-    color: colors.textPrimary,
-    marginTop: spacing.xs,
-  },
-  kpiSub: { ...typography.small, color: colors.textMuted, marginTop: 2 },
 
   cajaCard: {
-    marginHorizontal: spacing.lg,
-    marginBottom: spacing.xl,
-    backgroundColor: colors.successSubtle,
     borderRadius: radius.lg,
     padding: spacing.md,
     borderWidth: 1,
-    borderColor: colors.success,
   },
-  cajaCardPressed: { opacity: 0.9 },
+
   cajaHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: spacing.md,
     gap: spacing.md,
   },
+
   cajaIcon: {
-    width: 40,
-    height: 40,
+    width: 36,
+    height: 36,
     borderRadius: radius.md,
-    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  cajaTitle: { ...typography.bodyBold, color: colors.successText },
-  cajaSub: { ...typography.small, color: colors.successText, marginTop: 2 },
+
+  cajaTitle: {
+    ...typography.bodyBold,
+  },
+
+  cajaSub: {
+    ...typography.tiny,
+    marginTop: 2,
+  },
+
   cajaTotales: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: spacing.md,
   },
-  cajaTotalItem: { flex: 1 },
+
+  cajaTotalItem: {
+    flex: 1,
+  },
+
   cajaTotalLabel: {
     ...typography.tiny,
-    color: colors.successText,
     marginBottom: 2,
   },
+
   cajaTotalValue: {
     ...typography.bodyBold,
-    color: colors.successText,
   },
+
   cajaTotalHighlight: {
     fontSize: 16,
   },
 
-  alertSection: { paddingHorizontal: spacing.lg, marginBottom: spacing.xl },
+  alertSection: {
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.xl,
+  },
 
   listBox: {
-    backgroundColor: colors.surface,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.border,
     overflow: 'hidden',
   },
+
   topRow: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
-  topRowLast: { borderBottomWidth: 0 },
+
+  topRowLast: {
+    borderBottomWidth: 0,
+  },
+
   rank: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: colors.bgSubtle,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rankText: { ...typography.bodyBold, color: colors.textPrimary },
-  topNombre: { ...typography.bodyBold, color: colors.textPrimary },
+
+  rankText: {
+    ...typography.small,
+    fontFamily: typography.button.fontFamily,
+  },
+
+  topNombre: {
+    ...typography.bodyBold,
+  },
+
   progressWrap: {
     height: 4,
-    backgroundColor: colors.bgSubtle,
     borderRadius: 2,
     marginTop: spacing.sm,
     overflow: 'hidden',
   },
+
   progressFill: {
     height: '100%',
-    backgroundColor: colors.accent,
     borderRadius: 2,
   },
-  topSub: { ...typography.small, color: colors.textMuted, marginTop: 4 },
+
+  topSub: {
+    ...typography.small,
+    marginTop: 4,
+  },
 
   quickGrid: {
     flexDirection: 'row',
     gap: spacing.sm,
   },
+
   quickAction: {
-    flex: 1,
     alignItems: 'center',
-    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.border,
     borderRadius: radius.lg,
     paddingVertical: spacing.md,
     gap: spacing.sm,
   },
-  quickActionPressed: { backgroundColor: colors.surfacePressed },
-  quickLabel: { ...typography.small, color: colors.textPrimary },
+
+  quickIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  quickLabel: {
+    ...typography.small,
+  },
 
   saleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
-  saleRowLast: { borderBottomWidth: 0 },
-  saleRowPressed: { backgroundColor: colors.surfacePressed },
+
+  saleRowLast: {
+    borderBottomWidth: 0,
+  },
+
   saleIcon: {
     width: 32,
     height: 32,
     borderRadius: radius.md,
-    backgroundColor: colors.bgSubtle,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: spacing.md,
   },
-  saleInfo: { flex: 1, marginRight: spacing.md },
-  saleNumero: { ...typography.bodyBold, color: colors.textPrimary },
-  saleCliente: { ...typography.small, color: colors.textMuted, marginTop: 2 },
-  saleRight: { alignItems: 'flex-end', gap: spacing.xs },
-  saleTotal: { ...typography.bodyBold, color: colors.textPrimary },
+
+  saleInfo: {
+    flex: 1,
+    marginRight: spacing.md,
+  },
+
+  saleNumero: {
+    ...typography.bodyBold,
+  },
+
+  saleCliente: {
+    ...typography.small,
+    marginTop: 2,
+  },
+
+  saleRight: {
+    alignItems: 'flex-end',
+    gap: spacing.xs,
+  },
+
+  saleTotal: {
+    ...typography.bodyBold,
+  },
 
   emptySmall: {
-    backgroundColor: colors.surface,
     borderRadius: radius.lg,
     borderWidth: 1,
-    borderColor: colors.border,
     padding: spacing.xl,
     alignItems: 'center',
   },
-  emptySmallText: { ...typography.caption, color: colors.textMuted },
+
+  emptySmallText: {
+    ...typography.caption,
+  },
+
+  skelHero: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+
+  skelStat: {
+    flexBasis: '48%',
+    flexGrow: 1,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    padding: spacing.md,
+  },
 });

@@ -6,7 +6,8 @@ import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
 
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 import { useConfiguracionStore } from '@store/configuracionStore';
 import { useAuthStore } from '@store/authStore';
 import { useUIStore } from '@store/uiStore';
@@ -25,6 +26,7 @@ import type { ToastVariant } from '@tipos/index';
 
 export default function ConfiguracionScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
+  const colors = useColors();
   const { data, loading, cargar, actualizar } = useConfiguracionStore();
   const actualizarLogo = useConfiguracionStore((state) => state.actualizarLogo);
   const eliminarLogo = useConfiguracionStore((state) => state.eliminarLogo);
@@ -41,22 +43,15 @@ export default function ConfiguracionScreen(): React.ReactElement {
   const [saving, setSaving] = useState(false);
   const [savingLogo, setSavingLogo] = useState(false);
 
-  const [toast, setToast] = useState<{
-    visible: boolean;
-    message: string;
-    variant: ToastVariant;
-  }>({ visible: false, message: '', variant: 'info' });
+  const [toast, setToast] = useState<{ visible: boolean; message: string; variant: ToastVariant }>({
+    visible: false, message: '', variant: 'info',
+  });
 
   const logoValue = data?.negocio?.logo_url ?? data?.general?.logo_url;
   const logoPath = typeof logoValue === 'string' && logoValue.trim() ? logoValue : null;
 
-  const cargarDatos = useCallback(async (): Promise<void> => {
-    await cargar();
-  }, [cargar]);
-
-  useEffect(() => {
-    void cargarDatos();
-  }, [cargarDatos]);
+  const cargarDatos = useCallback(async (): Promise<void> => { await cargar(); }, [cargar]);
+  useEffect(() => { void cargarDatos(); }, [cargarDatos]);
 
   useEffect(() => {
     if (data) {
@@ -84,33 +79,21 @@ export default function ConfiguracionScreen(): React.ReactElement {
         impuesto_porcentaje: impuesto,
         impuesto_incluido: impuestoIncluido ? '1' : '0',
       });
-      await Haptics.notificationAsync(
-        Haptics.NotificationFeedbackType.Success,
-      );
-      setToast({
-        visible: true,
-        message: 'Configuración guardada',
-        variant: 'success',
-      });
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setToast({ visible: true, message: 'Configuración guardada', variant: 'success' });
     } catch (e) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const msg = e instanceof Error ? e.message : 'Error al guardar';
       setToast({ visible: true, message: msg, variant: 'error' });
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
   const seleccionarLogo = async (): Promise<void> => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.85,
+        mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.85,
       });
       if (result.canceled) return;
-
       const asset = result.assets[0];
       const mimeType = asset.mimeType ?? 'image/jpeg';
       const extension = mimeType.split('/')[1] ?? 'jpg';
@@ -126,36 +109,28 @@ export default function ConfiguracionScreen(): React.ReactElement {
     } catch (e) {
       const message = e instanceof Error ? e.message : 'No se pudo guardar el logo.';
       setToast({ visible: true, message, variant: 'error' });
-    } finally {
-      setSavingLogo(false);
-    }
+    } finally { setSavingLogo(false); }
   };
 
   const confirmarQuitarLogo = (): void => {
     Alert.alert('Quitar logo', 'Se quitará el logo del negocio de las pantallas y los informes.', [
       { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Quitar',
-        style: 'destructive',
-        onPress: async () => {
-          setSavingLogo(true);
-          try {
-            await eliminarLogo();
-            setToast({ visible: true, message: 'Logo eliminado.', variant: 'success' });
-          } catch (e) {
-            const message = e instanceof Error ? e.message : 'No se pudo quitar el logo.';
-            setToast({ visible: true, message, variant: 'error' });
-          } finally {
-            setSavingLogo(false);
-          }
-        },
-      },
+      { text: 'Quitar', style: 'destructive', onPress: async () => {
+        setSavingLogo(true);
+        try {
+          await eliminarLogo();
+          setToast({ visible: true, message: 'Logo eliminado.', variant: 'success' });
+        } catch (e) {
+          const message = e instanceof Error ? e.message : 'No se pudo quitar el logo.';
+          setToast({ visible: true, message, variant: 'error' });
+        } finally { setSavingLogo(false); }
+      } },
     ]);
   };
 
   if (loading && !data) {
     return (
-      <SafeAreaView style={styles.safe} edges={['top']}>
+      <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]} edges={['top']}>
         <TopBar title="Configuración" onBack={() => navigation.goBack()} />
         <Loader message="Cargando configuración" />
       </SafeAreaView>
@@ -163,29 +138,20 @@ export default function ConfiguracionScreen(): React.ReactElement {
   }
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]} edges={['top']}>
       <TopBar title="Configuración" onBack={() => navigation.goBack()} />
-
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-      >
+      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Logo del negocio</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Logo del negocio</Text>
           <View style={styles.logoRow}>
-            <View style={styles.logoPreview}>
+            <View style={[styles.logoPreview, { borderColor: colors.border, backgroundColor: colors.bgSubtle }]}>
               {logoPath ? (
-                <Image
-                  source={{ uri: getImageUrl(logoPath) ?? undefined }}
-                  style={styles.logoImage}
-                  contentFit="contain"
-                  cachePolicy="disk"
-                />
+                <Image source={{ uri: getImageUrl(logoPath) ?? undefined }} style={styles.logoImage} contentFit="contain" cachePolicy="disk" />
               ) : (
                 <MaterialCommunityIcons name="storefront-outline" size={30} color={colors.textMuted} />
               )}
             </View>
-            <Text style={styles.logoHint}>
+            <Text style={[styles.logoHint, { color: colors.textSecondary }]}>
               Aparecerá en las pantallas y en los informes PDF.
             </Text>
           </View>
@@ -200,133 +166,63 @@ export default function ConfiguracionScreen(): React.ReactElement {
               style={styles.logoButton}
             />
             {logoPath ? (
-              <Button
-                label="Quitar"
-                icon="delete-outline"
-                onPress={confirmarQuitarLogo}
-                disabled={savingLogo}
-                variant="ghost"
-                style={styles.logoButton}
-              />
+              <Button label="Quitar" icon="delete-outline" onPress={confirmarQuitarLogo} disabled={savingLogo} variant="ghost" style={styles.logoButton} />
             ) : null}
           </View>
         </Card>
 
-        {esAdmin ? <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Datos del negocio</Text>
-          <Input
-            label="Nombre"
-            icon="storefront-outline"
-            value={negocioNombre}
-            onChangeText={setNegocioNombre}
-          />
-          <Input
-            label="NIT"
-            icon="card-account-details-outline"
-            value={negocioNit}
-            onChangeText={setNegocioNit}
-          />
-          <Input
-            label="Teléfono"
-            icon="phone-outline"
-            keyboardType="phone-pad"
-            value={negocioTelefono}
-            onChangeText={setNegocioTelefono}
-          />
-          <Input
-            label="Dirección"
-            icon="map-marker-outline"
-            value={negocioDireccion}
-            onChangeText={setNegocioDireccion}
-          />
-          <Input
-            label="Correo"
-            icon="email-outline"
-            keyboardType="email-address"
-            autoCapitalize="none"
-            value={negocioEmail}
-            onChangeText={setNegocioEmail}
-          />
-        </Card> : null}
-
-        {esAdmin ? <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Impuestos</Text>
-          <FormattedNumberInput
-            label="Porcentaje de impuesto"
-            icon="percent-outline"
-            value={impuesto}
-            onChangeText={setImpuesto}
-          />
-          <View style={styles.switchRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.switchLabel}>
-                Precios incluyen impuesto
-              </Text>
-              <Text style={styles.switchHelper}>
-                Los precios de venta ya incluyen el impuesto
-              </Text>
-            </View>
-            <Switch
-              value={impuestoIncluido}
-              onValueChange={setImpuestoIncluido}
-            />
-          </View>
-        </Card> : null}
+        {esAdmin ? (
+          <Card variant="default" style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Datos del negocio</Text>
+            <Input label="Nombre" icon="storefront-outline" value={negocioNombre} onChangeText={setNegocioNombre} />
+            <Input label="NIT" icon="card-account-details-outline" value={negocioNit} onChangeText={setNegocioNit} />
+            <Input label="Teléfono" icon="phone-outline" keyboardType="phone-pad" value={negocioTelefono} onChangeText={setNegocioTelefono} />
+            <Input label="Dirección" icon="map-marker-outline" value={negocioDireccion} onChangeText={setNegocioDireccion} />
+            <Input label="Correo" icon="email-outline" keyboardType="email-address" autoCapitalize="none" value={negocioEmail} onChangeText={setNegocioEmail} />
+          </Card>
+        ) : null}
 
         {esAdmin ? (
-          <Button
-            label="Guardar cambios"
-            onPress={guardar}
-            loading={saving}
-            disabled={saving}
-            variant="primary"
-            size="lg"
-            fullWidth
-          />
+          <Card variant="default" style={styles.section}>
+            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Impuestos</Text>
+            <FormattedNumberInput label="Porcentaje de impuesto" icon="percent-outline" value={impuesto} onChangeText={setImpuesto} />
+            <View style={styles.switchRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.switchLabel, { color: colors.textPrimary }]}>Precios incluyen impuesto</Text>
+                <Text style={[styles.switchHelper, { color: colors.textMuted }]}>
+                  Los precios de venta ya incluyen el impuesto
+                </Text>
+              </View>
+              <Switch value={impuestoIncluido} onValueChange={setImpuestoIncluido} />
+            </View>
+          </Card>
+        ) : null}
+
+        {esAdmin ? (
+          <Button label="Guardar cambios" onPress={guardar} loading={saving} disabled={saving} variant="primary" size="lg" fullWidth />
         ) : null}
       </ScrollView>
 
-      <Toast
-        visible={toast.visible}
-        message={toast.message}
-        variant={toast.variant}
-        onHide={() => setToast((t) => ({ ...t, visible: false }))}
-      />
+      <Toast visible={toast.visible} message={toast.message} variant={toast.variant} onHide={() => setToast((t) => ({ ...t, visible: false }))} />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
+  safe: { flex: 1 },
   scroll: { padding: spacing.lg, paddingBottom: spacing.giant },
   section: { marginBottom: spacing.md },
   logoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   logoPreview: {
-    width: 84,
-    height: 84,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.bgSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
+    width: 84, height: 84, borderRadius: radius.md, borderWidth: 1,
+    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
   },
   logoImage: { width: '100%', height: '100%' },
-  logoHint: { ...typography.small, color: colors.textSecondary, flex: 1 },
+  logoHint: { ...typography.small, flex: 1 },
   logoActions: { flexDirection: 'row', gap: spacing.sm },
   logoButton: { flex: 1 },
-  sectionTitle: {
-    ...typography.h3,
-    color: colors.textPrimary,
-    marginBottom: spacing.lg,
-  },
-  switchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-  },
-  switchLabel: { ...typography.bodyBold, color: colors.textPrimary },
-  switchHelper: { ...typography.small, color: colors.textMuted, marginTop: 2 },
+  sectionTitle: { ...typography.h3, marginBottom: spacing.lg },
+  switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
+  switchLabel: { ...typography.bodyBold },
+  switchHelper: { ...typography.small, marginTop: 2 },
 });

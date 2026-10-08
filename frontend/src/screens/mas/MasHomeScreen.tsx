@@ -5,375 +5,450 @@ import {
   StyleSheet,
   ScrollView,
   Pressable,
-  Alert,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 import { useAuthStore } from '@store/authStore';
+import { useUIStore } from '@store/uiStore';
+import { useTheme } from '@hooks/useTheme';
 import Avatar from '@components/ui/Avatar';
 import Badge from '@components/ui/Badge';
 import Button from '@components/ui/Button';
+import AppHeader from '@components/layout/AppHeader';
+import { ROL_LABEL } from '@utils/constants';
+import { StaggeredSection, FadeInItem, ShineEffect } from '@components/animations';
+import type { Rol } from '@tipos/index';
 
 export default function MasHomeScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
-  const insets = useSafeAreaInsets();
+  const colors = useColors();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const showToast = useUIStore((s) => s.showToast);
+  const { preference } = useTheme();
 
-  const [cerrando, setCerrando] = useState(false);
+  const isAdmin = user?.rol === 'admin';
+  const rol: Rol = user?.rol ?? 'vendedor';
 
-  const esAdmin = user?.rol === 'admin';
-
-  const confirmarLogout = (): void => {
-    Alert.alert('Cerrar sesión', '¿Estás seguro que quieres cerrar sesión?', [
-      { text: 'Cancelar', style: 'cancel' },
-      {
-        text: 'Cerrar sesión',
-        style: 'destructive',
-        onPress: async () => {
-          setCerrando(true);
-          try {
-            await Haptics.notificationAsync(
-              Haptics.NotificationFeedbackType.Success,
-            );
-            await logout();
-          } finally {
-            setCerrando(false);
-          }
-        },
-      },
-    ]);
+  const handleLogout = async (): Promise<void> => {
+    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    await logout();
+    showToast('Sesión cerrada correctamente.', 'success');
   };
 
-  const ir = (screen: string, params?: Record<string, unknown>): void => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.navigate(screen as never, params as never);
+  const go = (route: string, params?: Record<string, unknown>): void => {
+    void Haptics.selectionAsync();
+    navigation.navigate(route as never, params as never);
   };
+
+  const themeLabel =
+    preference === 'system'
+      ? 'Sistema'
+      : preference === 'dark'
+        ? 'Oscuro'
+        : 'Claro';
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Mi cuenta</Text>
-      </View>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+      edges={['top']}
+    >
+      <AppHeader showSearch={false} showNotifications={false} />
 
       <ScrollView
-        contentContainerStyle={[
-          styles.scroll,
-          { paddingBottom: insets.bottom + spacing.xxl },
-        ]}
+        contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero perfil */}
-        <View style={styles.heroSection}>
-          <Avatar nombre={user?.nombre ?? 'Usuario'} size="xl" />
-          <Text style={styles.heroNombre} numberOfLines={1}>
-            {user?.nombre ?? 'Usuario'}
-          </Text>
-          <Text style={styles.heroEmail} numberOfLines={1}>
-            {user?.email ?? ''}
-          </Text>
-          <View style={styles.heroBadge}>
-            <Badge
-              label={esAdmin ? 'Administrador' : 'Vendedor'}
-              variant={esAdmin ? 'accent' : 'neutral'}
+        {/* ============ Tarjeta de usuario ============ */}
+        <StaggeredSection delay={0}>
+          <View style={styles.userCardWrapper}>
+            <ShineEffect borderRadius={radius.lg} delay={500}>
+              <View
+                style={[
+                  styles.userCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <Avatar nombre={user?.nombre ?? 'Usuario'} size="lg" />
+                <View style={styles.userInfo}>
+                  <Text
+                    style={[styles.userName, { color: colors.textPrimary }]}
+                    numberOfLines={1}
+                  >
+                    {user?.nombre ?? 'Usuario'}
+                  </Text>
+                  <Text
+                    style={[styles.userEmail, { color: colors.textSecondary }]}
+                    numberOfLines={1}
+                  >
+                    {user?.email ?? ''}
+                  </Text>
+                  <View style={styles.userRole}>
+                    <Badge
+                      label={ROL_LABEL[rol]}
+                      variant={isAdmin ? 'accent' : 'neutral'}
+                      size="sm"
+                    />
+                  </View>
+                </View>
+                <ChevronButton onPress={() => go('Perfil')} />
+              </View>
+            </ShineEffect>
+          </View>
+        </StaggeredSection>
+
+        {/* ============ Mi cuenta ============ */}
+        <StaggeredSection delay={120}>
+          <Section title="MI CUENTA" colors={colors}>
+            <MenuGroup colors={colors}>
+              <MenuRow
+                icon="account-circle-outline"
+                label="Perfil"
+                description="Datos personales y de contacto"
+                onPress={() => go('Perfil')}
+                colors={colors}
+              />
+              <MenuRow
+                icon="account-edit-outline"
+                label="Editar perfil"
+                onPress={() => go('EditarPerfil')}
+                colors={colors}
+              />
+              <MenuRow
+                icon="lock-outline"
+                label="Cambiar contraseña"
+                onPress={() => go('CambiarPassword')}
+                colors={colors}
+                last
+              />
+            </MenuGroup>
+          </Section>
+        </StaggeredSection>
+
+        {/* ============ Operación ============ */}
+        <StaggeredSection delay={240}>
+          <Section title="OPERACIÓN" colors={colors}>
+            <MenuGroup colors={colors}>
+              <MenuRow icon="cash-register" label="Caja" description="Apertura, cierre y movimientos" onPress={() => go('Caja')} colors={colors} />
+              <MenuRow icon="swap-horizontal" label="Inventario" description="Entradas, salidas y ajustes" onPress={() => go('Inventario')} colors={colors} />
+              <MenuRow icon="account-group-outline" label="Clientes" description="Cartera y estado de cuenta" onPress={() => go('Clientes')} colors={colors} />
+              <MenuRow icon="package-variant-closed" label="Proveedores" onPress={() => go('Proveedores')} colors={colors} />
+              <MenuRow icon="tag-outline" label="Categorías" onPress={() => go('Categorias')} colors={colors} />
+              <MenuRow icon="ticket-percent-outline" label="Promociones" onPress={() => go('Promociones')} colors={colors} />
+              <MenuRow icon="clipboard-list-outline" label="Órdenes de compra" onPress={() => go('OrdenesCompra')} colors={colors} />
+              <MenuRow icon="backup-restore" label="Devoluciones" onPress={() => go('Devoluciones')} colors={colors} last />
+            </MenuGroup>
+          </Section>
+        </StaggeredSection>
+
+        {/* ============ Administración ============ */}
+        {isAdmin ? (
+          <StaggeredSection delay={360}>
+            <Section title="ADMINISTRACIÓN" colors={colors}>
+              <MenuGroup colors={colors}>
+                <MenuRow icon="chart-line" label="Reportes" description="Ventas, utilidades y cartera" onPress={() => go('Reportes')} colors={colors} />
+                <MenuRow icon="star-circle-outline" label="Ranking de lealtad" onPress={() => go('LealtadRanking')} colors={colors} />
+                <MenuRow icon="account-multiple-outline" label="Usuarios" description="Equipo y permisos" onPress={() => go('Usuarios')} colors={colors} />
+                <MenuRow icon="history" label="Auditoría" description="Registro de actividad" onPress={() => go('Auditoria')} colors={colors} last />
+              </MenuGroup>
+            </Section>
+          </StaggeredSection>
+        ) : null}
+
+        {/* ============ Preferencias ============ */}
+        <StaggeredSection delay={480}>
+          <Section title="PREFERENCIAS" colors={colors}>
+            <MenuGroup colors={colors}>
+              <MenuRow icon="theme-light-dark" label="Apariencia" description={themeLabel} onPress={() => go('Apariencia')} colors={colors} />
+              <MenuRow icon="bell-outline" label="Notificaciones" description="Alertas y recordatorios" onPress={() => go('Notificaciones')} colors={colors} />
+              <MenuRow icon="cog-outline" label="Configuración" description="Datos del negocio, impuestos y respaldo" onPress={() => go('Configuracion')} colors={colors} last />
+            </MenuGroup>
+          </Section>
+        </StaggeredSection>
+
+        {/* ============ Ayuda ============ */}
+        <StaggeredSection delay={600}>
+          <Section title="AYUDA" colors={colors}>
+            <MenuGroup colors={colors}>
+              <MenuRow icon="help-circle-outline" label="Centro de ayuda" onPress={() => go('CentroAyuda')} colors={colors} />
+              <MenuRow icon="information-outline" label="Acerca de" description="Versión 2.0.0" onPress={() => go('AcercaDe')} colors={colors} last />
+            </MenuGroup>
+          </Section>
+        </StaggeredSection>
+
+        {/* ============ Cerrar sesión ============ */}
+        <StaggeredSection delay={720}>
+          <View style={styles.logoutWrap}>
+            <Button
+              label="Cerrar sesión"
+              variant="danger"
+              icon="logout"
+              onPress={handleLogout}
+              fullWidth
             />
           </View>
-        </View>
 
-        {/* Mi cuenta */}
-        <Section title="MI CUENTA">
-          <RowItem
-            icon="account-outline"
-            label="Editar perfil"
-            sub="Cambiar nombre y correo"
-            onPress={() => ir('Perfil')}
-          />
-          <RowItem
-            icon="bell-outline"
-            label="Notificaciones"
-            sub="Ver todas las alertas"
-            onPress={() => ir('Notificaciones')}
-            isLast
-          />
-        </Section>
+          <Text style={[styles.footer, { color: colors.textMuted }]}>
+            Interworld · v2.0.0
+          </Text>
+        </StaggeredSection>
 
-        {/* Operaciones */}
-        <Section title="OPERACIONES">
-          {esAdmin ? (
-  <RowItem
-    icon="crown-outline"
-    label="Programa de lealtad"
-    sub="Ranking y puntos de clientes"
-    onPress={() => ir('LealtadRanking')}
-  />
-) : null}
-
-          {esAdmin ? (
-  <RowItem
-    icon="clipboard-text-outline"
-    label="Órdenes de compra"
-    sub="Pedidos a proveedores"
-    onPress={() => ir('OrdenesCompra')}
-  />
-) : null}
-          {esAdmin ? (
-  <RowItem
-    icon="tag-outline"
-    label="Promociones"
-    sub="Descuentos y ofertas"
-    onPress={() => ir('Promociones')}
-  />
-) : null}
-          <RowItem
-            icon="account-group-outline"
-            label="Clientes"
-            sub="Gestión y estado de cuenta"
-            onPress={() => ir('Clientes')}
-          />
-          <RowItem
-            icon="shape-outline"
-            label="Categorías"
-            sub="Administrar categorías de productos"
-            onPress={() => ir('Categorias')}
-          />
-          <RowItem
-            icon="truck-outline"
-            label="Proveedores"
-            sub="Gestionar proveedores y contactos"
-            onPress={() => ir('Proveedores')}
-          />
-          <RowItem
-            icon="package-variant-closed"
-            label="Inventario"
-            sub="Movimientos y stock"
-            onPress={() => ir('Inventario')}
-          />
-          <RowItem
-            icon="cash-register"
-            label="Caja"
-            sub="Abrir, cerrar y movimientos"
-            onPress={() => ir('Caja')}
-          />
-          <RowItem
-  icon="keyboard-return"
-  label="Devoluciones"
-  sub="Historial y nuevas devoluciones"
-  onPress={() => ir('Devoluciones')}
-/>
-          {esAdmin ? (
-            <>
-              <RowItem
-                icon="account-cog-outline"
-                label="Usuarios"
-                sub="Administrar usuarios"
-                onPress={() => ir('Usuarios')}
-              />
-              <RowItem
-                icon="chart-line"
-                label="Reportes"
-                sub="Análisis del negocio"
-                onPress={() => ir('Reportes')}
-              />
-              <RowItem
-                icon="cog-outline"
-                label="Configuración"
-                sub="Datos del negocio e impuestos"
-                onPress={() => ir('Configuracion')}
-                isLast
-              />
-            </>
-          ) : (
-            <RowItem
-              icon="image-edit-outline"
-              label="Logo del negocio"
-              sub="Agregar, cambiar o quitar el logo"
-              onPress={() => ir('Configuracion')}
-              isLast
-            />
-          )}
-        </Section>
-
-<Section title="AYUDA">
-  <RowItem
-    icon="lifebuoy"
-    label="Centro de ayuda"
-    sub="Preguntas frecuentes"
-    onPress={() => ir('CentroAyuda')}
-  />
-  <RowItem
-    icon="information-outline"
-    label="Acerca de"
-    sub={`Interworld v2.0.0`}
-    onPress={() => ir('AcercaDe')}
-    isLast
-  />
-</Section>
-
-        {/* Sesión */}
-        <Section title="SESIÓN">
-          <RowItem
-            icon="logout-variant"
-            label={cerrando ? 'Cerrando sesión...' : 'Cerrar sesión'}
-            sub="Salir de tu cuenta"
-            onPress={confirmarLogout}
-            variant="danger"
-            disabled={cerrando}
-            isLast
-          />
-        </Section>
-
-        <Text style={styles.version}>Interworld v2.0.0</Text>
+        <View style={{ height: spacing.xxl }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
+/* ============================================================
+   Subcomponentes con animaciones
+   ============================================================ */
+
+type Colors = ReturnType<typeof useColors>;
+
 function Section(props: {
   title: string;
   children: React.ReactNode;
+  colors: Colors;
 }): React.ReactElement {
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{props.title}</Text>
-      <View style={styles.sectionCard}>{props.children}</View>
+      <Text style={[styles.sectionLabel, { color: props.colors.textMuted }]}>
+        {props.title}
+      </Text>
+      {props.children}
     </View>
   );
 }
 
-function RowItem(props: {
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
-  label: string;
-  sub?: string;
-  onPress: () => void;
-  variant?: 'default' | 'danger';
-  disabled?: boolean;
-  isLast?: boolean;
+function MenuGroup(props: {
+  children: React.ReactNode;
+  colors: Colors;
 }): React.ReactElement {
-  const isDanger = props.variant === 'danger';
-
   return (
-    <Pressable
-      onPress={props.disabled ? undefined : props.onPress}
-      disabled={props.disabled}
-      style={({ pressed }) => [
-        styles.row,
-        props.isLast ? styles.rowLast : null,
-        pressed && !props.disabled ? styles.rowPressed : null,
-        props.disabled ? { opacity: 0.5 } : null,
+    <View
+      style={[
+        styles.menuGroup,
+        {
+          backgroundColor: props.colors.surface,
+          borderColor: props.colors.border,
+        },
       ]}
     >
-      <View
-        style={[
-          styles.rowIcon,
-          isDanger ? { backgroundColor: colors.dangerSubtle } : null,
-        ]}
-      >
-        <MaterialCommunityIcons
-          name={props.icon}
-          size={18}
-          color={isDanger ? colors.danger : colors.textSecondary}
-        />
-      </View>
-      <View style={styles.rowInfo}>
-        <Text
-          style={[
-            styles.rowLabel,
-            isDanger ? { color: colors.danger } : null,
-          ]}
-        >
-          {props.label}
-        </Text>
-        {props.sub ? (
-          <Text style={styles.rowSub} numberOfLines={1}>
-            {props.sub}
-          </Text>
-        ) : null}
-      </View>
-      <MaterialCommunityIcons
-        name="chevron-right"
-        size={18}
-        color={isDanger ? colors.danger : colors.textMuted}
-      />
-    </Pressable>
+      {props.children}
+    </View>
   );
 }
 
+function MenuRow(props: {
+  icon: keyof typeof MaterialCommunityIcons.glyphMap;
+  label: string;
+  description?: string;
+  onPress: () => void;
+  colors: Colors;
+  last?: boolean;
+}): React.ReactElement {
+  const scale = React.useRef(new Animated.Value(1)).current;
+
+  const onPressIn = () => {
+    Animated.spring(scale, {
+      toValue: 0.98,
+      useNativeDriver: true,
+      damping: 15,
+      stiffness: 400,
+    }).start();
+  };
+
+  const onPressOut = () => {
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+      damping: 15,
+      stiffness: 400,
+    }).start();
+  };
+
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        onPress={props.onPress}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        style={[
+          styles.menuRow,
+          { borderBottomColor: props.colors.border },
+          props.last ? styles.menuRowLast : null,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={props.label}
+      >
+        <View
+          style={[
+            styles.menuIcon,
+            { backgroundColor: props.colors.bgSubtle },
+          ]}
+        >
+          <MaterialCommunityIcons
+            name={props.icon}
+            size={20}
+            color={props.colors.textSecondary}
+          />
+        </View>
+        <View style={styles.menuContent}>
+          <Text
+            style={[styles.menuLabel, { color: props.colors.textPrimary }]}
+          >
+            {props.label}
+          </Text>
+          {props.description ? (
+            <Text
+              style={[
+                styles.menuDescription,
+                { color: props.colors.textMuted },
+              ]}
+              numberOfLines={1}
+            >
+              {props.description}
+            </Text>
+          ) : null}
+        </View>
+        <MaterialCommunityIcons
+          name="chevron-right"
+          size={18}
+          color={props.colors.textMuted}
+        />
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+function ChevronButton({
+  onPress,
+}: {
+  onPress: () => void;
+}): React.ReactElement {
+  const colors = useColors();
+  const scale = React.useRef(new Animated.Value(1)).current;
+
+  const onPressIn = () => {
+    Animated.spring(scale, {
+      toValue: 0.85,
+      useNativeDriver: true,
+      damping: 15,
+      stiffness: 400,
+    }).start();
+  };
+
+  const onPressOut = () => {
+    Animated.spring(scale, {
+      toValue: 1,
+      useNativeDriver: true,
+      damping: 15,
+      stiffness: 400,
+    }).start();
+  };
+
+  return (
+    <Animated.View style={{ transform: [{ scale }] }}>
+      <Pressable
+        onPress={onPress}
+        onPressIn={onPressIn}
+        onPressOut={onPressOut}
+        hitSlop={8}
+        style={styles.userEdit}
+        accessibilityRole="button"
+        accessibilityLabel="Ver perfil"
+      >
+        <MaterialCommunityIcons
+          name="chevron-right"
+          size={20}
+          color={colors.textMuted}
+        />
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+/* ============================================================
+   Estilos
+   ============================================================ */
+
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.lg,
-  },
-  headerTitle: { ...typography.h2, color: colors.textPrimary },
-  scroll: { paddingHorizontal: spacing.lg },
-  heroSection: {
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    paddingVertical: spacing.xl,
-    paddingHorizontal: spacing.lg,
+  safe: { flex: 1 },
+  scroll: { paddingBottom: spacing.giant },
+
+  userCardWrapper: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
     marginBottom: spacing.xl,
   },
-  heroNombre: {
-    ...typography.h3,
-    color: colors.textPrimary,
-    marginTop: spacing.md,
-    textAlign: 'center',
-  },
-  heroEmail: {
-    ...typography.caption,
-    color: colors.textMuted,
-    marginTop: 2,
-    textAlign: 'center',
-  },
-  heroBadge: { marginTop: spacing.md },
-  section: { marginBottom: spacing.xl },
-  sectionTitle: {
-    ...typography.overline,
-    color: colors.textMuted,
-    marginBottom: spacing.sm,
-  },
-  sectionCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-  },
-  row: {
+  userCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
     gap: spacing.md,
   },
-  rowLast: { borderBottomWidth: 0 },
-  rowPressed: { backgroundColor: colors.surfacePressed },
-  rowIcon: {
+  userInfo: { flex: 1, minWidth: 0 },
+  userName: { ...typography.h3 },
+  userEmail: { ...typography.caption, marginTop: 2 },
+  userRole: { marginTop: spacing.sm },
+  userEdit: {
     width: 32,
     height: 32,
     borderRadius: radius.md,
-    backgroundColor: colors.bgSubtle,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  rowInfo: { flex: 1 },
-  rowLabel: { ...typography.bodyBold, color: colors.textPrimary },
-  rowSub: { ...typography.small, color: colors.textMuted, marginTop: 2 },
-  version: {
+
+  section: { marginBottom: spacing.xl },
+  sectionLabel: {
+    ...typography.overline,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+
+  menuGroup: {
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+  },
+  menuRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    borderBottomWidth: 1,
+    gap: spacing.md,
+    minHeight: 56,
+  },
+  menuRowLast: { borderBottomWidth: 0 },
+  menuIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuContent: { flex: 1, minWidth: 0 },
+  menuLabel: { ...typography.body },
+  menuDescription: { ...typography.small, marginTop: 2 },
+
+  logoutWrap: {
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.md,
+  },
+  footer: {
     ...typography.small,
-    color: colors.textMuted,
     textAlign: 'center',
-    marginTop: spacing.lg,
+    marginTop: spacing.xl,
   },
 });

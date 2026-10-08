@@ -1,9 +1,17 @@
 import React, { useMemo, useState } from 'react';
-import { View, Text, TextInput, StyleSheet, FlatList, Pressable } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  StyleSheet,
+  FlatList,
+  Pressable,
+} from 'react-native';
 import { Control, Controller, FieldValues, Path } from 'react-hook-form';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import Modal from '../ui/Modal';
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
 
 interface PickerOption {
   id: number;
@@ -32,6 +40,7 @@ export default function FormSearchPicker<T extends FieldValues>({
   icon,
   helper,
 }: FormSearchPickerProps<T>): React.ReactElement {
+  const colors = useColors();
   const [open, setOpen] = useState(false);
   const [busqueda, setBusqueda] = useState('');
 
@@ -53,8 +62,16 @@ export default function FormSearchPicker<T extends FieldValues>({
             <View style={styles.container}>
               {label ? (
                 <View style={styles.labelRow}>
-                  <Text style={styles.label}>{label}</Text>
-                  {required ? <Text style={styles.required}>*</Text> : null}
+                  <Text style={[styles.label, { color: colors.textPrimary }]}>
+                    {label}
+                  </Text>
+                  {required ? (
+                    <Text
+                      style={[styles.required, { color: colors.danger }]}
+                    >
+                      *
+                    </Text>
+                  ) : null}
                 </View>
               ) : null}
 
@@ -62,7 +79,10 @@ export default function FormSearchPicker<T extends FieldValues>({
                 onPress={() => setOpen(true)}
                 style={[
                   styles.selectBox,
-                  error ? styles.selectBoxError : null,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: error ? colors.danger : colors.borderStrong,
+                  },
                 ]}
               >
                 {icon ? (
@@ -76,13 +96,23 @@ export default function FormSearchPicker<T extends FieldValues>({
 
                 <View style={styles.selectText}>
                   <Text
-                    style={selected ? styles.selectValue : styles.selectPlaceholder}
+                    style={[
+                      selected ? styles.selectValue : styles.selectPlaceholder,
+                      {
+                        color: selected
+                          ? colors.textPrimary
+                          : colors.textMuted,
+                      },
+                    ]}
                     numberOfLines={1}
                   >
                     {selected ? selected.nombre : placeholder}
                   </Text>
                   {selected?.subtitle ? (
-                    <Text style={styles.selectSub} numberOfLines={1}>
+                    <Text
+                      style={[styles.selectSub, { color: colors.textMuted }]}
+                      numberOfLines={1}
+                    >
                       {selected.subtitle}
                     </Text>
                   ) : null}
@@ -96,9 +126,13 @@ export default function FormSearchPicker<T extends FieldValues>({
               </Pressable>
 
               {error?.message ? (
-                <Text style={styles.error}>{error.message}</Text>
+                <Text style={[styles.error, { color: colors.danger }]}>
+                  {error.message}
+                </Text>
               ) : helper ? (
-                <Text style={styles.helper}>{helper}</Text>
+                <Text style={[styles.helper, { color: colors.textMuted }]}>
+                  {helper}
+                </Text>
               ) : null}
             </View>
 
@@ -108,7 +142,12 @@ export default function FormSearchPicker<T extends FieldValues>({
               title={`Seleccionar ${label.toLowerCase()}`}
               scrollable
             >
-              <View style={styles.searchBox}>
+              <View
+                style={[
+                  styles.searchBox,
+                  { backgroundColor: colors.bgSubtle },
+                ]}
+              >
                 <MaterialCommunityIcons
                   name="magnify"
                   size={18}
@@ -119,7 +158,10 @@ export default function FormSearchPicker<T extends FieldValues>({
                   placeholderTextColor={colors.textMuted}
                   value={busqueda}
                   onChangeText={setBusqueda}
-                  style={styles.searchInput}
+                  style={[
+                    styles.searchInput,
+                    { color: colors.textPrimary },
+                  ]}
                 />
               </View>
 
@@ -136,14 +178,31 @@ export default function FormSearchPicker<T extends FieldValues>({
                     }}
                     style={({ pressed }) => [
                       styles.optionRow,
-                      index === filtered.length - 1 ? styles.optionRowLast : null,
+                      { borderBottomColor: colors.border },
+                      index === filtered.length - 1
+                        ? styles.optionRowLast
+                        : null,
                       pressed ? styles.optionRowPressed : null,
                     ]}
                   >
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.optionName}>{item.nombre}</Text>
+                      <Text
+                        style={[
+                          styles.optionName,
+                          { color: colors.textPrimary },
+                        ]}
+                      >
+                        {item.nombre}
+                      </Text>
                       {item.subtitle ? (
-                        <Text style={styles.optionSub}>{item.subtitle}</Text>
+                        <Text
+                          style={[
+                            styles.optionSub,
+                            { color: colors.textMuted },
+                          ]}
+                        >
+                          {item.subtitle}
+                        </Text>
                       ) : null}
                     </View>
                     <MaterialCommunityIcons
@@ -154,7 +213,11 @@ export default function FormSearchPicker<T extends FieldValues>({
                   </Pressable>
                 )}
                 ListEmptyComponent={
-                  <Text style={styles.emptyText}>Sin resultados</Text>
+                  <Text
+                    style={[styles.emptyText, { color: colors.textMuted }]}
+                  >
+                    Sin resultados
+                  </Text>
                 }
               />
             </Modal>
@@ -172,34 +235,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: spacing.sm,
   },
-  label: { ...typography.bodyBold, color: colors.textPrimary },
+  label: { ...typography.bodyBold },
   required: {
     ...typography.bodyBold,
-    color: colors.danger,
     marginLeft: 3,
   },
   selectBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: colors.borderStrong,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     minHeight: 44,
   },
-  selectBoxError: { borderColor: colors.danger },
   selectIcon: { marginRight: spacing.sm },
   selectText: { flex: 1 },
-  selectPlaceholder: { ...typography.body, color: colors.textMuted },
-  selectValue: { ...typography.body, color: colors.textPrimary },
-  selectSub: { ...typography.small, color: colors.textMuted, marginTop: 2 },
-  error: { ...typography.small, color: colors.danger, marginTop: spacing.sm },
-  helper: { ...typography.small, color: colors.textMuted, marginTop: spacing.sm },
+  selectPlaceholder: { ...typography.body },
+  selectValue: { ...typography.body },
+  selectSub: { ...typography.small, marginTop: 2 },
+  error: { ...typography.small, marginTop: spacing.sm },
+  helper: { ...typography.small, marginTop: spacing.sm },
   searchBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.bgSubtle,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
     height: 40,
@@ -208,7 +266,6 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     ...typography.body,
-    color: colors.textPrimary,
     marginLeft: spacing.sm,
     paddingVertical: 0,
   },
@@ -217,15 +274,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: colors.border,
   },
   optionRowLast: { borderBottomWidth: 0 },
   optionRowPressed: { opacity: 0.6 },
-  optionName: { ...typography.bodyBold, color: colors.textPrimary },
-  optionSub: { ...typography.small, color: colors.textMuted, marginTop: 2 },
+  optionName: { ...typography.bodyBold },
+  optionSub: { ...typography.small, marginTop: 2 },
   emptyText: {
     ...typography.caption,
-    color: colors.textMuted,
     textAlign: 'center',
     paddingVertical: spacing.lg,
   },
