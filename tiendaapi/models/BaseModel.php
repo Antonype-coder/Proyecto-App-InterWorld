@@ -2,15 +2,17 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../core/Auth.php';
 
 if (!class_exists('BaseModel')) {
-    abstract class BaseModel
+    class BaseModel
     {
         protected string $table = '';
         protected string $primaryKey = 'id';
         protected array $fillable = [];
         protected array $hidden = [];
-        protected bool $timestamps = true;
+        protected bool $tenantScoped = true;
+
         protected PDO $db;
 
         public function __construct()
@@ -18,168 +20,228 @@ if (!class_exists('BaseModel')) {
             $this->db = Database::getConnection();
         }
 
-        public function db(): PDO
+        protected function negocioId(): ?int
         {
-            return $this->db;
+            if (!$this->tenantScoped) return null;
+            if (!class_exists('Auth')) return null;
+            return Auth::negocioId();
         }
 
-        public function table(): string
+        protected function applyTenant(string &$sql, array &$params, string $alias = ''): void
         {
-            return $this->table;
+            $nid = $this->negocioId();
+            if ($nid === null) return;
+
+            $prefix = $alias !== '' ? $alias . '.' : '';
+            $sql .= " AND {$prefix}negocio_id = :__nid";
+            $params['__nid'] = $nid;
         }
 
-        public function all(array $conditions = [], string $orderBy = '', int $limit = 0, int $offset = 0): array
-        {
-            $sql    = "SELECT * FROM {$this->table}";
-            $where  = [];
-            $params = [];
-
-            foreach ($conditions as $col => $val) {
-                if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $col)) continue;
-                if ($val === null) {
-                    $where[] = "{$col} IS NULL";
-                } else {
-                    $where[] = "{$col} = :{$col}";
-                    $params[$col] = $val;
-                }
-            }
-
-            if (!empty($where)) {
-                $sql .= ' WHERE ' . implode(' AND ', $where);
-            }
-
-            if ($orderBy !== '' && preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*(\s+(ASC|DESC))?(,\s*[a-zA-Z_][a-zA-Z0-9_]*(\s+(ASC|DESC))?)*$/i', $orderBy)) {
-                $sql .= " ORDER BY {$orderBy}";
-            }
-
-            if ($limit > 0) {
-                $sql .= ' LIMIT ' . (int) $limit;
-                if ($offset > 0) {
-                    $sql .= ' OFFSET ' . (int) $offset;
-                }
-            }
-
-            $stmt = $this->db->prepare($sql);
-            $stmt->execute($params);
-            $rows = $stmt->fetchAll();
-
-            return array_map(fn($r) => $this->hideFields($r), $rows);
-        }
+        // ====================================================================
+        // CRUD básico
+        // ====================================================================
 
         public function find(int $id): ?array
         {
-            $stmt = $this->db->prepare(
-                "SELECT * FROM {$this->table} WHERE {$this->primaryKey} = :id LIMIT 1"
-            );
-            $stmt->execute(['id' => $id]);
-            $row = $stmt->fetch();
+            $sql    = "SELECT * FROM {$this->table} WHERE {$this->primaryKey} = :id";
+            $params = ['id' => $id];
 
-            return $row === false ? null : $this->hideFields($row);
+            $this->applyTenant($sql, $params);
+            $sql .= ' LIMIT 1';
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
+            return $row ? $this->hideFields($row) : null;
         }
 
-        public function findBy(array $conditions): ?array
+        public function findBy(array $conditions, string $orderBy = 'id ASC'): ?array
         {
-            $rows = $this->all($conditions, '', 1);
-            return $rows[0] ?? null;
-        }
-
-        public function count(array $conditions = []): int
-        {
-            $sql    = "SELECT COUNT(*) AS total FROM {$this->table}";
-            $where  = [];
+            $sql    = "SELECT * FROM {$this->table} WHERE 1=1";
             $params = [];
 
             foreach ($conditions as $col => $val) {
-                if (!preg_match('/^[a-zA-Z_][a-zA-Z0-9_]*$/', $col)) continue;
-                if ($val === null) {
-                    $where[] = "{$col} IS NULL";
-                } else {
-                    $where[] = "{$col} = :{$col}";
-                    $params[$col] = $val;
-                }
+                $sql .= " AND {$col} = :{$col}";
+                $params[$col] = $val;
             }
 
-            if (!empty($where)) {
-                $sql .= ' WHERE ' . implode(' AND ', $where);
+            $this->applyTenant($sql, $params);
+            $sql .= " ORDER BY {$orderBy} LIMIT 1";
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
+            return $row ? $this->hideFields($row) : null;
+        }
+
+        public function all(array $conditions = [], string $orderBy = 'id ASC'): array
+        {
+            $sql    = "SELECT * FROM {$this->table} WHERE 1=1";
+            $params = [];
+
+            foreach ($conditions as $col => $val) {
+                $sql .= " AND {$col} = :{$col}";
+                $params[$col] = $val;
+            }
+
+            $this->applyTenant($sql, $params);
+
+            if ($orderBy !== '') {
+                $sql .= " ORDER BY {$orderBy}";
             }
 
             $stmt = $this->db->prepare($sql);
             $stmt->execute($params);
-            $row = $stmt->fetch();
 
-            return (int) ($row['total'] ?? 0);
-        }
-
-        public function exists(array $conditions): bool
-        {
-            return $this->findBy($conditions) !== null;
+            return array_map(
+                fn($r) => $this->hideFields($r),
+                $stmt->fetchAll(PDO::FETCH_ASSOC) ?: []
+            );
         }
 
         public function create(array $data): int
         {
-            $data = $this->filterFillable($data);
-            if ($data === []) {
-                throw new InvalidArgumentException('No hay campos válidos para insertar.');
+            $nid = $this->negocioId();
+            if ($nid !== null && !isset($data['negocio_id'])) {
+                $data['negocio_id'] = $nid;
             }
 
-            $cols         = array_keys($data);
-            $placeholders = array_map(fn($c) => ':' . $c, $cols);
+            $cols   = [];
+            $phs    = [];
+            $params = [];
+
+            foreach ($data as $col => $val) {
+                if (!in_array($col, $this->fillable, true) && $col !== 'negocio_id') {
+                    continue;
+                }
+                $cols[] = $col;
+                $phs[]  = ':' . $col;
+                $params[$col] = $val;
+            }
+
+            if (empty($cols)) {
+                throw new InvalidArgumentException('No hay columnas válidas para insertar.');
+            }
 
             $sql = sprintf(
                 'INSERT INTO %s (%s) VALUES (%s)',
                 $this->table,
                 implode(', ', $cols),
-                implode(', ', $placeholders)
+                implode(', ', $phs)
             );
 
             $stmt = $this->db->prepare($sql);
-            $stmt->execute($data);
+            $stmt->execute($params);
 
             return (int) $this->db->lastInsertId();
         }
 
         public function update(int $id, array $data): bool
         {
-            $data = $this->filterFillable($data);
-            if ($data === []) {
-                throw new InvalidArgumentException('No hay campos válidos para actualizar.');
-            }
+            $sets   = [];
+            $params = ['__id' => $id];
 
-            $sets = [];
-            foreach (array_keys($data) as $col) {
+            foreach ($data as $col => $val) {
+                if (!in_array($col, $this->fillable, true)) {
+                    continue;
+                }
                 $sets[] = "{$col} = :{$col}";
+                $params[$col] = $val;
             }
 
-            $sql = sprintf(
-                'UPDATE %s SET %s WHERE %s = :__id',
-                $this->table,
-                implode(', ', $sets),
-                $this->primaryKey
-            );
+            if (empty($sets)) return false;
 
-            $data['__id'] = $id;
+            $sql = "UPDATE {$this->table} SET " . implode(', ', $sets)
+                 . " WHERE {$this->primaryKey} = :__id";
+
+            $this->applyTenant($sql, $params);
+
             $stmt = $this->db->prepare($sql);
-
-            return $stmt->execute($data);
+            return $stmt->execute($params);
         }
 
         public function delete(int $id): bool
         {
-            $stmt = $this->db->prepare(
-                "DELETE FROM {$this->table} WHERE {$this->primaryKey} = :id"
-            );
-            return $stmt->execute(['id' => $id]);
+            $sql    = "DELETE FROM {$this->table} WHERE {$this->primaryKey} = :__id";
+            $params = ['__id' => $id];
+
+            $this->applyTenant($sql, $params);
+
+            $stmt = $this->db->prepare($sql);
+            return $stmt->execute($params);
         }
 
-        protected function filterFillable(array $data): array
+        public function count(array $conditions = []): int
         {
-            $out = [];
-            foreach ($this->fillable as $field) {
-                if (array_key_exists($field, $data)) {
-                    $out[$field] = $data[$field];
-                }
+            $sql    = "SELECT COUNT(*) FROM {$this->table} WHERE 1=1";
+            $params = [];
+
+            foreach ($conditions as $col => $val) {
+                $sql .= " AND {$col} = :{$col}";
+                $params[$col] = $val;
             }
-            return $out;
+
+            $this->applyTenant($sql, $params);
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
+
+            return (int) $stmt->fetchColumn();
+        }
+
+        // ====================================================================
+        // Métodos raw (NO filtran ni ocultan automáticamente)
+        // ====================================================================
+
+        public function raw(string $sql, array $params = []): array
+        {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        }
+
+        public function rawScalar(string $sql, array $params = []): mixed
+        {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
+            return $stmt->fetchColumn();
+        }
+
+        public function rawFirst(string $sql, array $params = []): ?array
+        {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
+            $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
+            return $row ?: null;
+        }
+
+        // ====================================================================
+        // Utilidades
+        // ====================================================================
+
+        public function transaction(callable $callback): mixed
+        {
+            $inTransaction = $this->db->inTransaction();
+
+            if (!$inTransaction) {
+                $this->db->beginTransaction();
+            }
+
+            try {
+                $result = $callback($this->db);
+                if (!$inTransaction && $this->db->inTransaction()) {
+                    $this->db->commit();
+                }
+                return $result;
+            } catch (Throwable $e) {
+                if (!$inTransaction && $this->db->inTransaction()) {
+                    $this->db->rollBack();
+                }
+                throw $e;
+            }
         }
 
         protected function hideFields(array $row): array
@@ -188,41 +250,6 @@ if (!class_exists('BaseModel')) {
                 unset($row[$field]);
             }
             return $row;
-        }
-
-        protected function raw(string $sql, array $params = []): array
-        {
-            $stmt = $this->db->prepare($sql);
-            $stmt->execute($params);
-            return $stmt->fetchAll() ?: [];
-        }
-
-        protected function rawFirst(string $sql, array $params = []): ?array
-        {
-            $rows = $this->raw($sql, $params);
-            return $rows[0] ?? null;
-        }
-
-        protected function rawScalar(string $sql, array $params = []): mixed
-        {
-            $stmt = $this->db->prepare($sql);
-            $stmt->execute($params);
-            return $stmt->fetchColumn();
-        }
-
-        protected function transaction(callable $callback): mixed
-        {
-            $this->db->beginTransaction();
-            try {
-                $result = $callback($this->db);
-                $this->db->commit();
-                return $result;
-            } catch (Throwable $e) {
-                if ($this->db->inTransaction()) {
-                    $this->db->rollBack();
-                }
-                throw $e;
-            }
         }
     }
 }

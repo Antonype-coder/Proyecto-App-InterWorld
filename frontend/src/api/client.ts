@@ -11,14 +11,13 @@ import type { ApiResponse } from '@tipos/index';
 
 const api: AxiosInstance = axios.create({
   baseURL: API_URL,
-  timeout: 20000,
+  timeout: 120000, // 45 seg — sube por si la red va lenta
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
   },
 });
 
-// Callback opcional para notificar cierre de sesión
 let onUnauthorized: (() => void) | null = null;
 
 export function setUnauthorizedHandler(handler: () => void): void {

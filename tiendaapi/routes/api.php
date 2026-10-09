@@ -85,13 +85,14 @@ $router->delete('/api/proveedores/{id}', 'ProveedorController@destroy', $adminOn
 // ==================================================================
 // PRODUCTOS (rutas específicas ANTES de {id})
 // ==================================================================
-$router->get ('/api/productos/barcode/{codigo}', 'ProductoController@findByBarcode', $auth);
-$router->get ('/api/productos/stock-bajo',       'ProductoController@stockBajo',     $auth);
-$router->get ('/api/productos',                  'ProductoController@index',         $auth);
-$router->get ('/api/productos/{id}',             'ProductoController@show',          $auth);
-$router->post('/api/productos',                  'ProductoController@store',         $adminOnly);
-$router->put ('/api/productos/{id}',             'ProductoController@update',        $adminOnly);
-$router->delete('/api/productos/{id}',           'ProductoController@destroy',       $adminOnly);
+$router->get ('/api/productos/barcode/{codigo}',   'ProductoController@findByBarcode', $auth);
+$router->get ('/api/productos/stock-bajo',         'ProductoController@stockBajo',     $auth);
+$router->get ('/api/productos/{id}/estadisticas',  'ProductoController@estadisticas',  $auth);
+$router->get ('/api/productos',                    'ProductoController@index',         $auth);
+$router->get ('/api/productos/{id}',               'ProductoController@show',          $auth);
+$router->post('/api/productos',                    'ProductoController@store',         $adminOnly);
+$router->put ('/api/productos/{id}',               'ProductoController@update',        $adminOnly);
+$router->delete('/api/productos/{id}',             'ProductoController@destroy',       $adminOnly);
 
 // ==================================================================
 // CLIENTES
@@ -199,13 +200,13 @@ $router->get('/api/auditoria', 'AuditoriaController@index', $adminOnly);
 // ==================================================================
 // CONFIGURACIÓN
 // ==================================================================
-$router->get('/api/configuracion', 'ConfiguracionController@index',  $auth);
-$router->put('/api/configuracion', 'ConfiguracionController@update', $adminOnly);
-$router->put('/api/configuracion/logo', 'ConfiguracionController@updateLogo', $auth);
+$router->get ('/api/configuracion',      'ConfiguracionController@index',  $auth);
+$router->put ('/api/configuracion',      'ConfiguracionController@update', $adminOnly);
+$router->put ('/api/configuracion/logo', 'ConfiguracionController@updateLogo', $auth);
 $router->delete('/api/configuracion/logo', 'ConfiguracionController@deleteLogo', $auth);
 
 // ==================================================================
 // UPLOADS
 // ==================================================================
 $router->post('/api/uploads/productos', 'UploadController@imagenProducto', $adminOnly);
-$router->post('/api/uploads/logo',      'UploadController@imagenLogo',     $auth);
+$router->post('/api/uploads/logo',      'UploadController@logo',     $auth);

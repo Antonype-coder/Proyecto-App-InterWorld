@@ -11,13 +11,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 
-import { colors, radius, spacing, typography } from '@theme/index';
+import { radius, spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
+import type { AppColors } from '@theme/colors';
 import { FAQS, CATEGORIAS_FAQ, type FAQ } from '@data/faqs';
 import TopBar from '@components/layout/TopBar';
 import Chip from '@components/ui/Chip';
 
 export default function CentroAyudaScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const [busqueda, setBusqueda] = useState('');
   const [categoria, setCategoria] = useState<FAQ['categoria'] | 'todas'>('todas');
   const [abierta, setAbierta] = useState<string | null>(null);
@@ -35,7 +40,7 @@ export default function CentroAyudaScreen(): React.ReactElement {
   }, [busqueda, categoria]);
 
   return (
-    <SafeAreaView style={styles.safe} edges={['top']}>
+    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]} edges={['top']}>
       <TopBar title="Centro de ayuda" onBack={() => navigation.goBack()} />
 
       <ScrollView
@@ -43,23 +48,31 @@ export default function CentroAyudaScreen(): React.ReactElement {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Header con icono */}
         <View style={styles.hero}>
-          <View style={styles.heroIcon}>
+          <View style={[styles.heroIcon, { backgroundColor: colors.accentSubtle }]}>
             <MaterialCommunityIcons
               name="lifebuoy"
               size={32}
               color={colors.accent}
             />
           </View>
-          <Text style={styles.heroTitle}>¿En qué te ayudamos?</Text>
-          <Text style={styles.heroSub}>
+          <Text style={[styles.heroTitle, { color: colors.textPrimary }]}>
+            ¿En qué te ayudamos?
+          </Text>
+          <Text style={[styles.heroSub, { color: colors.textSecondary }]}>
             Encuentra respuestas a las preguntas más frecuentes
           </Text>
         </View>
 
-        {/* Buscador */}
-        <View style={styles.searchBox}>
+        <View
+          style={[
+            styles.searchBox,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.border,
+            },
+          ]}
+        >
           <MaterialCommunityIcons
             name="magnify"
             size={18}
@@ -70,7 +83,7 @@ export default function CentroAyudaScreen(): React.ReactElement {
             placeholderTextColor={colors.textMuted}
             value={busqueda}
             onChangeText={setBusqueda}
-            style={styles.searchInput}
+            style={[styles.searchInput, { color: colors.textPrimary }]}
           />
           {busqueda.length > 0 ? (
             <Pressable onPress={() => setBusqueda('')} hitSlop={8}>
@@ -83,7 +96,6 @@ export default function CentroAyudaScreen(): React.ReactElement {
           ) : null}
         </View>
 
-        {/* Filtros por categoría */}
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -106,7 +118,6 @@ export default function CentroAyudaScreen(): React.ReactElement {
           ))}
         </ScrollView>
 
-        {/* Lista de FAQs */}
         {filtradas.length === 0 ? (
           <View style={styles.empty}>
             <MaterialCommunityIcons
@@ -114,13 +125,23 @@ export default function CentroAyudaScreen(): React.ReactElement {
               size={48}
               color={colors.textMuted}
             />
-            <Text style={styles.emptyTitle}>Sin resultados</Text>
-            <Text style={styles.emptySub}>
+            <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
+              Sin resultados
+            </Text>
+            <Text style={[styles.emptySub, { color: colors.textMuted }]}>
               Intenta con otras palabras o cambia el filtro
             </Text>
           </View>
         ) : (
-          <View style={styles.listBox}>
+          <View
+            style={[
+              styles.listBox,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.border,
+              },
+            ]}
+          >
             {filtradas.map((faq, idx) => {
               const isOpen = abierta === faq.id;
               return (
@@ -128,6 +149,7 @@ export default function CentroAyudaScreen(): React.ReactElement {
                   key={faq.id}
                   style={[
                     styles.faqItem,
+                    { borderBottomColor: colors.border },
                     idx === filtradas.length - 1 ? styles.faqItemLast : null,
                   ]}
                 >
@@ -135,7 +157,10 @@ export default function CentroAyudaScreen(): React.ReactElement {
                     onPress={() => setAbierta(isOpen ? null : faq.id)}
                     style={styles.faqHeader}
                   >
-                    <Text style={styles.faqPregunta} numberOfLines={isOpen ? 3 : 2}>
+                    <Text
+                      style={[styles.faqPregunta, { color: colors.textPrimary }]}
+                      numberOfLines={isOpen ? 3 : 2}
+                    >
                       {faq.pregunta}
                     </Text>
                     <MaterialCommunityIcons
@@ -145,8 +170,20 @@ export default function CentroAyudaScreen(): React.ReactElement {
                     />
                   </Pressable>
                   {isOpen ? (
-                    <View style={styles.faqRespuestaWrap}>
-                      <Text style={styles.faqRespuesta}>{faq.respuesta}</Text>
+                    <View
+                      style={[
+                        styles.faqRespuestaWrap,
+                        { backgroundColor: colors.bgSubtle },
+                      ]}
+                    >
+                      <Text
+                        style={[
+                          styles.faqRespuesta,
+                          { color: colors.textSecondary },
+                        ]}
+                      >
+                        {faq.respuesta}
+                      </Text>
                     </View>
                   ) : null}
                 </View>
@@ -155,16 +192,22 @@ export default function CentroAyudaScreen(): React.ReactElement {
           </View>
         )}
 
-        {/* Contacto */}
-        <View style={styles.contactBox}>
+        <View
+          style={[
+            styles.contactBox,
+            { backgroundColor: colors.accentSubtle },
+          ]}
+        >
           <MaterialCommunityIcons
             name="message-text-outline"
             size={20}
             color={colors.accent}
           />
           <View style={{ flex: 1 }}>
-            <Text style={styles.contactTitle}>¿No encontraste lo que buscabas?</Text>
-            <Text style={styles.contactSub}>
+            <Text style={[styles.contactTitle, { color: colors.accentText }]}>
+              ¿No encontraste lo que buscabas?
+            </Text>
+            <Text style={[styles.contactSub, { color: colors.accentText }]}>
               Contacta al desarrollador para soporte adicional.
             </Text>
           </View>
@@ -174,105 +217,92 @@ export default function CentroAyudaScreen(): React.ReactElement {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  scroll: { padding: spacing.lg, paddingBottom: spacing.giant },
-  hero: { alignItems: 'center', marginBottom: spacing.xl },
-  heroIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: radius.xl,
-    backgroundColor: colors.accentSubtle,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.md,
-  },
-  heroTitle: { ...typography.h2, color: colors.textPrimary },
-  heroSub: {
-    ...typography.caption,
-    color: colors.textSecondary,
-    textAlign: 'center',
-    marginTop: spacing.xs,
-  },
-  searchBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.md,
-    paddingHorizontal: spacing.md,
-    height: 44,
-    marginBottom: spacing.md,
-  },
-  searchInput: {
-    flex: 1,
-    ...typography.body,
-    color: colors.textPrimary,
-    marginLeft: spacing.sm,
-    paddingVertical: 0,
-  },
-  chipsScroll: { flexGrow: 0, maxHeight: 44, marginBottom: spacing.lg },
-  chipsRow: { gap: spacing.sm, alignItems: 'center' },
-  listBox: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-  },
-  faqItem: {
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  faqItemLast: { borderBottomWidth: 0 },
-  faqHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: spacing.md,
-    gap: spacing.md,
-  },
-  faqPregunta: {
-    ...typography.bodyBold,
-    color: colors.textPrimary,
-    flex: 1,
-  },
-  faqRespuestaWrap: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
-    backgroundColor: colors.bgSubtle,
-  },
-  faqRespuesta: {
-    ...typography.body,
-    color: colors.textSecondary,
-    lineHeight: 22,
-    paddingTop: spacing.md,
-  },
-  empty: {
-    alignItems: 'center',
-    paddingVertical: spacing.giant,
-    gap: spacing.md,
-  },
-  emptyTitle: { ...typography.h3, color: colors.textPrimary },
-  emptySub: {
-    ...typography.caption,
-    color: colors.textMuted,
-    textAlign: 'center',
-  },
-  contactBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.accentSubtle,
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    marginTop: spacing.xl,
-  },
-  contactTitle: { ...typography.bodyBold, color: colors.accentText },
-  contactSub: {
-    ...typography.small,
-    color: colors.accentText,
-    marginTop: 2,
-  },
-});
+const makeStyles = (colors: AppColors) =>
+  StyleSheet.create({
+    safe: { flex: 1 },
+    scroll: { padding: spacing.lg, paddingBottom: spacing.giant },
+    hero: { alignItems: 'center', marginBottom: spacing.xl },
+    heroIcon: {
+      width: 64,
+      height: 64,
+      borderRadius: radius.xl,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: spacing.md,
+    },
+    heroTitle: { ...typography.h2 },
+    heroSub: {
+      ...typography.caption,
+      textAlign: 'center',
+      marginTop: spacing.xs,
+    },
+    searchBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderRadius: radius.md,
+      paddingHorizontal: spacing.md,
+      height: 44,
+      marginBottom: spacing.md,
+    },
+    searchInput: {
+      flex: 1,
+      ...typography.body,
+      marginLeft: spacing.sm,
+      paddingVertical: 0,
+    },
+    chipsScroll: { flexGrow: 0, maxHeight: 44, marginBottom: spacing.lg },
+    chipsRow: { gap: spacing.sm, alignItems: 'center' },
+    listBox: {
+      borderRadius: radius.lg,
+      borderWidth: 1,
+      overflow: 'hidden',
+    },
+    faqItem: {
+      borderBottomWidth: 1,
+    },
+    faqItemLast: { borderBottomWidth: 0 },
+    faqHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: spacing.md,
+      gap: spacing.md,
+    },
+    faqPregunta: {
+      ...typography.bodyBold,
+      flex: 1,
+    },
+    faqRespuestaWrap: {
+      paddingHorizontal: spacing.md,
+      paddingBottom: spacing.md,
+    },
+    faqRespuesta: {
+      ...typography.body,
+      lineHeight: 22,
+      paddingTop: spacing.md,
+    },
+    empty: {
+      alignItems: 'center',
+      paddingVertical: spacing.giant,
+      gap: spacing.md,
+    },
+    emptyTitle: { ...typography.h3 },
+    emptySub: {
+      ...typography.caption,
+      textAlign: 'center',
+    },
+    contactBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      borderRadius: radius.lg,
+      padding: spacing.md,
+      marginTop: spacing.xl,
+    },
+    contactTitle: { ...typography.bodyBold },
+    contactSub: {
+      ...typography.small,
+      marginTop: 2,
+    },
+  });

@@ -19,7 +19,7 @@ const PIN_STORAGE_KEY = '@interworld:pin';
 type Props = NativeStackScreenProps<AuthStackParamList, 'Pin'>;
 
 export default function PinScreen({ navigation, route }: Props): React.ReactElement {
-  const mode = route.params?.mode ?? 'verify';
+  const mode = (route.params as { mode?: 'verify' | 'set' } | undefined)?.mode ?? 'verify';
   const showToast = useUIStore((s) => s.showToast);
   const { t } = useTranslation();
 

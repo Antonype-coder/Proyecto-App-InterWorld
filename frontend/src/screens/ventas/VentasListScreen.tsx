@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,13 +10,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 
 import { radius, spacing, typography } from '@theme/index';
 import { useColors } from '@hooks/useColors';
 import { ventasApi } from '@api/index';
 import type { VentaResumen } from '@tipos/index';
 import { useDebounce } from '@hooks/useDebounce';
+import { useFocusedLoad } from '@hooks/useFocusedLoad';
 import { FadeInItem } from '@components/animations';
 import VentaItem from '@components/domain/VentaItem';
 import RichEmptyState from '@components/ui/RichEmptyState';
@@ -37,6 +38,7 @@ export default function VentasListScreen(): React.ReactElement {
   const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>('todas');
   const [filtroPago, setFiltroPago] = useState<FiltroPago>('todos');
   const [busqueda, setBusqueda] = useState('');
+  const isFirstLoad = useRef(true);
 
   const debouncedBusqueda = useDebounce(busqueda, 400);
 
@@ -51,19 +53,18 @@ export default function VentasListScreen(): React.ReactElement {
       });
       setVentas(res.items);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error al cargar');
+      const msg = e instanceof Error ? e.message : 'Error al cargar';
+      // Solo mostramos error si NO hay datos previos
+      if (ventas.length === 0) setError(msg);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtroEstado, filtroPago, debouncedBusqueda]);
 
-  useFocusEffect(
-    useCallback(() => {
-      setLoading(true);
-      void cargar();
-    }, [cargar]),
-  );
+  // ⚡ Solo bloquea la primera vez; después refresca en background
+  useFocusedLoad(cargar, () => setLoading(true));
 
   const hayFiltro =
     filtroEstado !== 'todas' || filtroPago !== 'todos' || busqueda.length > 0;

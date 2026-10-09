@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../utils/FolioGenerator.php';
+require_once __DIR__ . '/../core/Auth.php';
 require_once __DIR__ . '/../core/Logger.php';
 require_once __DIR__ . '/../core/Exceptions/BusinessException.php';
 require_once __DIR__ . '/../core/Exceptions/NotFoundException.php';
@@ -17,8 +18,15 @@ if (!class_exists('OrdenCompraService')) {
             $this->db = Database::getConnection();
         }
 
+        private function nid(): ?int
+        {
+            return class_exists('Auth') ? Auth::negocioId() : null;
+        }
+
         public function listar(array $filtros = [], int $limit = 50, int $offset = 0): array
         {
+            $nid = $this->nid();
+
             $sql = "SELECT oc.*, p.nombre AS proveedor_nombre, u.nombre AS usuario_nombre
                     FROM ordenes_compra oc
                     INNER JOIN proveedores p ON p.id = oc.proveedor_id
@@ -26,6 +34,10 @@ if (!class_exists('OrdenCompraService')) {
                     WHERE 1=1";
             $params = [];
 
+            if ($nid !== null) {
+                $sql .= " AND oc.negocio_id = :nid";
+                $params['nid'] = $nid;
+            }
             if (!empty($filtros['estado'])) {
                 $sql .= " AND oc.estado = :estado";
                 $params['estado'] = $filtros['estado'];
@@ -43,15 +55,24 @@ if (!class_exists('OrdenCompraService')) {
 
         public function obtener(int $id): array
         {
-            $stmt = $this->db->prepare(
-                "SELECT oc.*, p.nombre AS proveedor_nombre, p.email AS proveedor_email,
-                        p.contacto AS proveedor_contacto, u.nombre AS usuario_nombre
-                 FROM ordenes_compra oc
-                 INNER JOIN proveedores p ON p.id = oc.proveedor_id
-                 INNER JOIN usuarios u ON u.id = oc.usuario_id
-                 WHERE oc.id = :id LIMIT 1"
-            );
-            $stmt->execute(['id' => $id]);
+            $nid = $this->nid();
+
+            $sql = "SELECT oc.*, p.nombre AS proveedor_nombre, p.email AS proveedor_email,
+                           p.contacto AS proveedor_contacto, u.nombre AS usuario_nombre
+                    FROM ordenes_compra oc
+                    INNER JOIN proveedores p ON p.id = oc.proveedor_id
+                    INNER JOIN usuarios u ON u.id = oc.usuario_id
+                    WHERE oc.id = :id";
+            $params = ['id' => $id];
+
+            if ($nid !== null) {
+                $sql .= " AND oc.negocio_id = :nid";
+                $params['nid'] = $nid;
+            }
+            $sql .= " LIMIT 1";
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
             $oc = $stmt->fetch();
             if ($oc === false) throw new NotFoundException('Orden no encontrada.');
 
@@ -69,7 +90,12 @@ if (!class_exists('OrdenCompraService')) {
 
         public function crear(array $data, int $usuarioId): array
         {
-            return $this->transaction(function () use ($data, $usuarioId) {
+            $nid = $this->nid();
+            if ($nid === null) {
+                throw new BusinessException('No se pudo determinar el negocio.');
+            }
+
+            return $this->transaction(function () use ($data, $usuarioId, $nid) {
                 $proveedorId = (int)($data['proveedor_id'] ?? 0);
                 $items = $data['items'] ?? [];
 
@@ -90,23 +116,24 @@ if (!class_exists('OrdenCompraService')) {
                     $detalles[] = ['producto_id' => $pid, 'cantidad' => $cant, 'precio_unitario' => $precio, 'subtotal' => $sub];
                 }
 
-                $numero = FolioGenerator::ordenCompra($this->db);
+                $numero = FolioGenerator::ordenCompra($this->db, $nid);
                 $estado = (string)($data['estado'] ?? 'borrador');
 
                 $ins = $this->db->prepare(
                     "INSERT INTO ordenes_compra
-                     (numero, proveedor_id, usuario_id, subtotal, impuesto, total, estado, fecha_esperada, notas)
-                     VALUES (:numero, :prov, :uid, :sub, 0, :total, :estado, :fecha, :notas)"
+                     (negocio_id, numero, proveedor_id, usuario_id, subtotal, impuesto, total, estado, fecha_esperada, notas)
+                     VALUES (:nid, :numero, :prov, :uid, :sub, 0, :total, :estado, :fecha, :notas)"
                 );
                 $ins->execute([
+                    'nid'    => $nid,
                     'numero' => $numero,
-                    'prov' => $proveedorId,
-                    'uid' => $usuarioId,
-                    'sub' => number_format($subtotal, 2, '.', ''),
-                    'total' => number_format($subtotal, 2, '.', ''),
+                    'prov'   => $proveedorId,
+                    'uid'    => $usuarioId,
+                    'sub'    => number_format($subtotal, 2, '.', ''),
+                    'total'  => number_format($subtotal, 2, '.', ''),
                     'estado' => $estado,
-                    'fecha' => $data['fecha_esperada'] ?? null,
-                    'notas' => $data['notas'] ?? null,
+                    'fecha'  => $data['fecha_esperada'] ?? null,
+                    'notas'  => $data['notas'] ?? null,
                 ]);
                 $ocId = (int)$this->db->lastInsertId();
 
@@ -139,30 +166,41 @@ if (!class_exists('OrdenCompraService')) {
             if ($oc['estado'] === 'recibida') throw new BusinessException('La orden ya fue recibida completamente.');
             if ($oc['estado'] === 'cancelada') throw new BusinessException('La orden está cancelada.');
 
-            $stmt = $this->db->prepare("UPDATE ordenes_compra SET estado = :e WHERE id = :id");
-            $stmt->execute(['e' => $estado, 'id' => $id]);
+            $nid = $this->nid();
+
+            $sql = "UPDATE ordenes_compra SET estado = :e WHERE id = :id";
+            $params = ['e' => $estado, 'id' => $id];
+
+            if ($nid !== null) {
+                $sql .= " AND negocio_id = :nid";
+                $params['nid'] = $nid;
+            }
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
 
             return $this->obtener($id);
         }
 
-        /**
-         * Recibe la orden completa o parcialmente.
-         * $recepciones = [['detalle_id' => X, 'cantidad' => 5], ...]
-         */
         public function recibir(int $id, array $recepciones, int $usuarioId): array
         {
-            return $this->transaction(function () use ($id, $recepciones, $usuarioId) {
+            $nid = $this->nid();
+            if ($nid === null) {
+                throw new BusinessException('No se pudo determinar el negocio.');
+            }
+
+            return $this->transaction(function () use ($id, $recepciones, $usuarioId, $nid) {
                 $oc = $this->obtener($id);
                 if ($oc['estado'] === 'cancelada') throw new BusinessException('La orden está cancelada.');
                 if ($oc['estado'] === 'recibida') throw new BusinessException('La orden ya fue recibida.');
 
                 $insMov = $this->db->prepare(
                     "INSERT INTO movimientos_inventario
-                     (producto_id, usuario_id, tipo, cantidad, stock_anterior, stock_nuevo, referencia_tipo, referencia_id, motivo)
-                     VALUES (:pid, :uid, 'entrada', :cant, :ant, :nuevo, 'orden_compra', :ref, :motivo)"
+                     (negocio_id, producto_id, usuario_id, tipo, cantidad, stock_anterior, stock_nuevo, referencia_tipo, referencia_id, motivo)
+                     VALUES (:nid, :pid, :uid, 'entrada', :cant, :ant, :nuevo, 'orden_compra', :ref, :motivo)"
                 );
-                $updStock = $this->db->prepare("UPDATE productos SET stock = stock + :c WHERE id = :id");
-                $getStock = $this->db->prepare("SELECT stock FROM productos WHERE id = :id FOR UPDATE");
+                $updStock = $this->db->prepare("UPDATE productos SET stock = stock + :c WHERE id = :id AND negocio_id = :nid");
+                $getStock = $this->db->prepare("SELECT stock FROM productos WHERE id = :id AND negocio_id = :nid FOR UPDATE");
                 $updDet = $this->db->prepare(
                     "UPDATE orden_compra_detalle SET cantidad_recibida = cantidad_recibida + :c WHERE id = :id"
                 );
@@ -173,7 +211,6 @@ if (!class_exists('OrdenCompraService')) {
                     $cant = (int)($r['cantidad'] ?? 0);
                     if ($detId <= 0 || $cant <= 0) continue;
 
-                    // Buscar detalle
                     $stmt = $this->db->prepare(
                         "SELECT * FROM orden_compra_detalle WHERE id = :id AND orden_compra_id = :oc"
                     );
@@ -185,19 +222,20 @@ if (!class_exists('OrdenCompraService')) {
                     if ($cant > $pendiente) $cant = $pendiente;
                     if ($cant <= 0) continue;
 
-                    $getStock->execute(['id' => $det['producto_id']]);
+                    $getStock->execute(['id' => $det['producto_id'], 'nid' => $nid]);
                     $ant = (int)$getStock->fetchColumn();
                     $nuevo = $ant + $cant;
 
-                    $updStock->execute(['c' => $cant, 'id' => $det['producto_id']]);
+                    $updStock->execute(['c' => $cant, 'id' => $det['producto_id'], 'nid' => $nid]);
                     $updDet->execute(['c' => $cant, 'id' => $detId]);
                     $insMov->execute([
-                        'pid' => $det['producto_id'],
-                        'uid' => $usuarioId,
-                        'cant' => $cant,
-                        'ant' => $ant,
-                        'nuevo' => $nuevo,
-                        'ref' => $id,
+                        'nid'    => $nid,
+                        'pid'    => $det['producto_id'],
+                        'uid'    => $usuarioId,
+                        'cant'   => $cant,
+                        'ant'    => $ant,
+                        'nuevo'  => $nuevo,
+                        'ref'    => $id,
                         'motivo' => "Recepción OC {$oc['numero']}",
                     ]);
 
@@ -206,7 +244,6 @@ if (!class_exists('OrdenCompraService')) {
 
                 if (!$algoRecibido) throw new BusinessException('No se recibió ningún producto.');
 
-                // Determinar estado final
                 $stmt = $this->db->prepare(
                     "SELECT SUM(cantidad) AS total, SUM(cantidad_recibida) AS recibido
                      FROM orden_compra_detalle WHERE orden_compra_id = :id"
@@ -216,9 +253,9 @@ if (!class_exists('OrdenCompraService')) {
                 $estadoFinal = ((int)$tot['total'] === (int)$tot['recibido']) ? 'recibida' : 'recibida_parcial';
 
                 $upd = $this->db->prepare(
-                    "UPDATE ordenes_compra SET estado = :e, fecha_recepcion = NOW() WHERE id = :id"
+                    "UPDATE ordenes_compra SET estado = :e, fecha_recepcion = NOW() WHERE id = :id AND negocio_id = :nid"
                 );
-                $upd->execute(['e' => $estadoFinal, 'id' => $id]);
+                $upd->execute(['e' => $estadoFinal, 'id' => $id, 'nid' => $nid]);
 
                 return $this->obtener($id);
             });

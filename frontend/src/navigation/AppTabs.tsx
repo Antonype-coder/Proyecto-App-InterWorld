@@ -22,11 +22,6 @@ const Tab = createBottomTabNavigator<AppTabsParamList>();
 
 type TabName = 'Inicio' | 'Productos' | 'Ventas' | 'Mas';
 
-/**
- * Listener de tabPress que resetea el stack de la tab al root.
- * Usa CommonActions.reset con target al nested navigator para
- * descartar toda la pila previa (no hace push, resetea de verdad).
- */
 function makeTabPressListener(tabName: TabName, rootScreen: string) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return ({ navigation }: any) => ({
@@ -65,8 +60,15 @@ export default function AppTabs(): React.ReactElement {
   return (
     <Tab.Navigator
       initialRouteName="Inicio"
+      detachInactiveScreens={false}
       screenOptions={{
         headerShown: false,
+
+        // ⚡ FLUIDEZ
+        lazy: false,
+        freezeOnBlur: true,
+        animation: 'none',
+
         tabBarActiveTintColor: colors.textPrimary,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: {

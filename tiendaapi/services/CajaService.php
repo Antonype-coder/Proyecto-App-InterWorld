@@ -4,6 +4,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../core/Exceptions/BusinessException.php';
 require_once __DIR__ . '/../core/Exceptions/NotFoundException.php';
 require_once __DIR__ . '/../core/Logger.php';
+require_once __DIR__ . '/../core/Auth.php';
 require_once __DIR__ . '/../config/database.php';
 
 if (!class_exists('CajaService')) {
@@ -16,27 +17,50 @@ if (!class_exists('CajaService')) {
             $this->db = Database::getConnection();
         }
 
+        private function nid(): ?int
+        {
+            return class_exists('Auth') ? Auth::negocioId() : null;
+        }
+
         public function sesionAbierta(int $usuarioId): ?array
         {
-            $stmt = $this->db->prepare(
-                "SELECT * FROM caja_sesiones WHERE usuario_id = :uid AND estado = 'abierta' ORDER BY id DESC LIMIT 1"
-            );
-            $stmt->execute(['uid' => $usuarioId]);
+            $nid = $this->nid();
+
+            $sql = "SELECT * FROM caja_sesiones
+                    WHERE usuario_id = :uid AND estado = 'abierta'";
+            $params = ['uid' => $usuarioId];
+
+            if ($nid !== null) {
+                $sql .= " AND negocio_id = :nid";
+                $params['nid'] = $nid;
+            }
+            $sql .= " ORDER BY id DESC LIMIT 1";
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
             $row = $stmt->fetch();
             return $row === false ? null : $row;
         }
 
         public function abrir(int $usuarioId, float $montoApertura, ?string $notas): array
         {
+            $nid = $this->nid();
+            if ($nid === null) {
+                throw new BusinessException('No se pudo determinar el negocio.');
+            }
+
             if ($this->sesionAbierta($usuarioId) !== null) {
                 throw new BusinessException('Ya tienes una caja abierta. Ciérrala antes de abrir otra.');
             }
 
             $stmt = $this->db->prepare(
-                "INSERT INTO caja_sesiones (usuario_id, monto_apertura, notas_apertura, estado)
-                 VALUES (:uid, :monto, :notas, 'abierta')"
+                "INSERT INTO caja_sesiones
+                    (negocio_id, usuario_id, monto_apertura, notas_apertura, estado)
+                 VALUES
+                    (:nid, :uid, :monto, :notas, 'abierta')"
             );
             $stmt->execute([
+                'nid'   => $nid,
                 'uid'   => $usuarioId,
                 'monto' => number_format($montoApertura, 2, '.', ''),
                 'notas' => $notas,
@@ -50,8 +74,19 @@ if (!class_exists('CajaService')) {
 
         public function obtenerSesion(int $id): array
         {
-            $stmt = $this->db->prepare("SELECT * FROM caja_sesiones WHERE id = :id LIMIT 1");
-            $stmt->execute(['id' => $id]);
+            $nid = $this->nid();
+
+            $sql = "SELECT * FROM caja_sesiones WHERE id = :id";
+            $params = ['id' => $id];
+
+            if ($nid !== null) {
+                $sql .= " AND negocio_id = :nid";
+                $params['nid'] = $nid;
+            }
+            $sql .= " LIMIT 1";
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
             $row = $stmt->fetch();
             if ($row === false) {
                 throw new NotFoundException('Sesión de caja no encontrada.');
@@ -61,6 +96,11 @@ if (!class_exists('CajaService')) {
 
         public function registrarMovimiento(int $sesionId, int $usuarioId, array $data): array
         {
+            $nid = $this->nid();
+            if ($nid === null) {
+                throw new BusinessException('No se pudo determinar el negocio.');
+            }
+
             $sesion = $this->obtenerSesion($sesionId);
             if ($sesion['estado'] !== 'abierta') {
                 throw new BusinessException('La caja no está abierta.');
@@ -68,10 +108,14 @@ if (!class_exists('CajaService')) {
 
             $stmt = $this->db->prepare(
                 "INSERT INTO caja_movimientos
-                 (caja_sesion_id, usuario_id, tipo, monto, metodo_pago, referencia_tipo, referencia_id, descripcion)
-                 VALUES (:sid, :uid, :tipo, :monto, :metodo, :ref_tipo, :ref_id, :desc)"
+                    (negocio_id, caja_sesion_id, usuario_id, tipo, monto, metodo_pago,
+                     referencia_tipo, referencia_id, descripcion)
+                 VALUES
+                    (:nid, :sid, :uid, :tipo, :monto, :metodo,
+                     :ref_tipo, :ref_id, :desc)"
             );
             $stmt->execute([
+                'nid'       => $nid,
                 'sid'       => $sesionId,
                 'uid'       => $usuarioId,
                 'tipo'      => $data['tipo'],
@@ -88,8 +132,19 @@ if (!class_exists('CajaService')) {
 
         public function obtenerMovimiento(int $id): array
         {
-            $stmt = $this->db->prepare("SELECT * FROM caja_movimientos WHERE id = :id LIMIT 1");
-            $stmt->execute(['id' => $id]);
+            $nid = $this->nid();
+
+            $sql = "SELECT * FROM caja_movimientos WHERE id = :id";
+            $params = ['id' => $id];
+
+            if ($nid !== null) {
+                $sql .= " AND negocio_id = :nid";
+                $params['nid'] = $nid;
+            }
+            $sql .= " LIMIT 1";
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
             $row = $stmt->fetch();
             if ($row === false) {
                 throw new NotFoundException('Movimiento no encontrado.');
@@ -99,21 +154,25 @@ if (!class_exists('CajaService')) {
 
         public function movimientos(int $sesionId): array
         {
-            $stmt = $this->db->prepare(
-                "SELECT * FROM caja_movimientos WHERE caja_sesion_id = :sid ORDER BY id ASC"
-            );
-            $stmt->execute(['sid' => $sesionId]);
+            $nid = $this->nid();
+
+            $sql = "SELECT * FROM caja_movimientos WHERE caja_sesion_id = :sid";
+            $params = ['sid' => $sesionId];
+
+            if ($nid !== null) {
+                $sql .= " AND negocio_id = :nid";
+                $params['nid'] = $nid;
+            }
+            $sql .= " ORDER BY id ASC";
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
             return $stmt->fetchAll() ?: [];
         }
 
-        /**
-         * Calcula los totales de la sesión. Los métodos de pago NO efectivo
-         * (tarjeta, transferencia) NO entran al efectivo físico esperado.
-         *
-         * Efectivo esperado = apertura + ventas_efectivo + ingresos_manuales - egresos
-         */
         private function calcularTotales(int $sesionId): array
         {
+            // Corregidos los typos: "0END" → "0 END" y "ASegresos" → "AS egresos"
             $stmt = $this->db->prepare(
                 "SELECT
                     COALESCE(SUM(CASE WHEN tipo = 'venta' AND metodo_pago = 'efectivo' THEN monto ELSE 0 END), 0) AS ventas_efectivo,
@@ -147,7 +206,6 @@ if (!class_exists('CajaService')) {
                 $totales = $this->calcularTotales($sesionId);
                 $apertura = (float) $sesion['monto_apertura'];
 
-                // Efectivo físico que debería haber en caja.
                 $efectivoEsperado = round(
                     $apertura
                     + $totales['ventas_efectivo']
@@ -158,22 +216,23 @@ if (!class_exists('CajaService')) {
 
                 $diferencia = round($montoDeclarado - $efectivoEsperado, 2);
 
-                $upd = $this->db->prepare(
-                    "UPDATE caja_sesiones SET
-                        estado = 'cerrada',
-                        monto_cierre_declarado      = :declarado,
-                        monto_cierre_sistema        = :sistema,
-                        diferencia                  = :diff,
-                        total_ventas_efectivo       = :v_efectivo,
-                        total_ventas_tarjeta        = :v_tarjeta,
-                        total_ventas_transferencia  = :v_transf,
-                        total_ingresos              = :ingresos,
-                        total_egresos               = :egresos,
-                        notas_cierre = :notas,
-                        cerrada_at   = NOW()
-                     WHERE id = :id"
-                );
-                $upd->execute([
+                $nid = $this->nid();
+
+                $sql = "UPDATE caja_sesiones SET
+                            estado = 'cerrada',
+                            monto_cierre_declarado      = :declarado,
+                            monto_cierre_sistema        = :sistema,
+                            diferencia                  = :diff,
+                            total_ventas_efectivo       = :v_efectivo,
+                            total_ventas_tarjeta        = :v_tarjeta,
+                            total_ventas_transferencia  = :v_transf,
+                            total_ingresos              = :ingresos,
+                            total_egresos               = :egresos,
+                            notas_cierre = :notas,
+                            cerrada_at   = NOW()
+                        WHERE id = :id";
+
+                $params = [
                     'declarado'   => number_format($montoDeclarado, 2, '.', ''),
                     'sistema'     => number_format($efectivoEsperado, 2, '.', ''),
                     'diff'        => number_format($diferencia, 2, '.', ''),
@@ -184,7 +243,15 @@ if (!class_exists('CajaService')) {
                     'egresos'     => number_format($totales['egresos'], 2, '.', ''),
                     'notas'       => $notas,
                     'id'          => $sesionId,
-                ]);
+                ];
+
+                if ($nid !== null) {
+                    $sql .= " AND negocio_id = :nid";
+                    $params['nid'] = $nid;
+                }
+
+                $upd = $this->db->prepare($sql);
+                $upd->execute($params);
 
                 Logger::info('Caja cerrada', [
                     'sesion_id'  => $sesionId,
@@ -199,10 +266,19 @@ if (!class_exists('CajaService')) {
 
         public function historial(int $usuarioId, int $limit = 50): array
         {
-            $stmt = $this->db->prepare(
-                "SELECT * FROM caja_sesiones WHERE usuario_id = :uid ORDER BY id DESC LIMIT " . (int) $limit
-            );
-            $stmt->execute(['uid' => $usuarioId]);
+            $nid = $this->nid();
+
+            $sql = "SELECT * FROM caja_sesiones WHERE usuario_id = :uid";
+            $params = ['uid' => $usuarioId];
+
+            if ($nid !== null) {
+                $sql .= " AND negocio_id = :nid";
+                $params['nid'] = $nid;
+            }
+            $sql .= " ORDER BY id DESC LIMIT " . (int) $limit;
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
             return $stmt->fetchAll() ?: [];
         }
 

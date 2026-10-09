@@ -25,7 +25,7 @@ import { useSuccessPulse } from '@hooks/useSuccessPulse';
 import { useProductosStore } from '@store/productosStore';
 import { useCarritoStore } from '@store/carritoStore';
 import { useAuthStore } from '@store/authStore';
-import { clientesApi } from '@api/index';
+import { clientesApi, promocionesApi } from '@api/index';
 import { useNetworkStatus } from '@hooks/useNetworkStatus';
 import BusinessLogo from '@components/domain/BusinessLogo';
 import {
@@ -35,8 +35,14 @@ import {
   sincronizarVentasPendientes,
   type VentaPendiente,
 } from '@services/offline.service';
-import type { Producto, Cliente, AppTabsParamList } from '@tipos/index';
+import type {
+  Producto,
+  Cliente,
+  AppTabsParamList,
+  Promocion,
+} from '@tipos/index';
 import { formatCurrency } from '@utils/format';
+import { labelDePromocion } from '@utils/promociones';
 import FormattedNumberInput from '@components/forms/FormattedNumberInput';
 import Button from '@components/ui/Button';
 import Modal from '@components/ui/Modal';
@@ -59,11 +65,12 @@ export default function POSScreen(): React.ReactElement {
   const usuario = useAuthStore((state) => state.user);
   const isOnline = useNetworkStatus();
   const colors = useColors();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const isWide = width >= 900;
   const { mode: productMode, setMode: setProductMode } = useProductViewMode();
 
   const { productos, cargar } = useProductosStore();
+
   const {
     items,
     tipoPago,
@@ -77,6 +84,7 @@ export default function POSScreen(): React.ReactElement {
     setClienteId,
     setDescuento,
     subtotal,
+    descuentoPromociones,
     total,
     cantidadTotal,
   } = useCarritoStore();
@@ -100,6 +108,25 @@ export default function POSScreen(): React.ReactElement {
     message: string;
     variant: ToastVariant;
   }>({ visible: false, message: '', variant: 'info' });
+
+  // ⚡ Mapa de promociones por producto
+  const [promosPorProducto, setPromosPorProducto] = useState<
+    Map<number, Promocion[]>
+  >(new Map());
+
+  // Altura dinámica del carrito
+  const CART_HEADER_H = 56;
+  const CART_ITEM_H = 96;
+  const CART_TOTALS_H = 260;
+  const CART_PADDING = 24;
+
+  const cartIdealHeight = Math.min(
+    CART_HEADER_H +
+      items.length * CART_ITEM_H +
+      CART_TOTALS_H +
+      CART_PADDING,
+    height * 0.65,
+  );
 
   const recargarPendientes = useCallback(async (): Promise<void> => {
     if (!usuario?.id) {
@@ -148,6 +175,54 @@ export default function POSScreen(): React.ReactElement {
     }
   }, [isOnline, ventasPendientes.length, usuario?.id, sincronizarPendientes]);
 
+  // ⚡ Cargar todas las promociones vigentes y agruparlas por producto
+  useEffect(() => {
+    if (productos.length === 0) return;
+    let cancel = false;
+
+    (async () => {
+      try {
+        const promos = await promocionesApi.listar({
+          activo: 1,
+          vigentes: true,
+        });
+        if (cancel) return;
+
+        const globales = promos.filter((p) => p.aplica_a === 'global');
+        const porProd = promos.filter((p) => p.aplica_a === 'producto');
+        const porCat = promos.filter((p) => p.aplica_a === 'categoria');
+
+        const map = new Map<number, Promocion[]>();
+        for (const prod of productos) {
+          const lista: Promocion[] = [...globales];
+          for (const pp of porProd) {
+            if (Number(pp.producto_id) === prod.id) lista.push(pp);
+          }
+          if (prod.categoria_id) {
+            for (const pc of porCat) {
+              if (Number(pc.categoria_id) === prod.categoria_id) {
+                lista.push(pc);
+              }
+            }
+          }
+          if (lista.length > 0) map.set(prod.id, lista);
+        }
+        setPromosPorProducto(map);
+      } catch {
+        // silencioso
+      }
+    })();
+
+    return () => {
+      cancel = true;
+    };
+  }, [productos]);
+
+  const getPromosDeProducto = useCallback(
+    (p: Producto): Promocion[] => promosPorProducto.get(p.id) ?? [],
+    [promosPorProducto],
+  );
+
   const onAgregar = useCallback(
     async (producto: Producto): Promise<void> => {
       if (producto.stock <= 0) {
@@ -159,9 +234,11 @@ export default function POSScreen(): React.ReactElement {
         return;
       }
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      agregar(producto, 1);
+
+      const promos = getPromosDeProducto(producto);
+      agregar(producto, 1, promos.length > 0 ? promos : undefined);
     },
-    [agregar],
+    [agregar, getPromosDeProducto],
   );
 
   const abrirScanner = useCallback((): void => {
@@ -278,11 +355,13 @@ export default function POSScreen(): React.ReactElement {
     setCobrando(true);
     let guardadaLocalmente = false;
     try {
+      const descuentoTotal = descuento + descuentoPromociones();
+
       const pending = crearVentaPendiente(
         {
           tipo_pago: tipoPago,
           cliente_id: clienteId,
-          descuento,
+          descuento: descuentoTotal,
           metodo_pago: metodo,
           items: items.map((i) => ({
             producto_id: i.producto.id,
@@ -365,16 +444,8 @@ export default function POSScreen(): React.ReactElement {
     onSearch: () => searchRef.current?.focus(),
   });
 
-  // ============================================================
-  // Render de productos según modo
-  // ============================================================
   const renderProductos = (): React.ReactElement => {
-    const numColumns =
-      productMode === 'grid'
-        ? isWide
-          ? 4
-          : 2
-        : 1;
+    const numColumns = productMode === 'grid' ? (isWide ? 4 : 2) : 1;
 
     const renderItem = ({
       item,
@@ -383,6 +454,10 @@ export default function POSScreen(): React.ReactElement {
       item: Producto;
       index: number;
     }): React.ReactElement => {
+      const listaPromos = getPromosDeProducto(item);
+      const tiene = listaPromos.length > 0;
+      const etiqueta = tiene ? labelDePromocion(listaPromos[0]) : '';
+
       if (productMode === 'grid') {
         return (
           <View style={{ flex: 1 / numColumns }}>
@@ -390,32 +465,71 @@ export default function POSScreen(): React.ReactElement {
               producto={item}
               onPress={() => void onAgregar(item)}
             />
+            {tiene ? (
+              <View
+                pointerEvents="none"
+                style={[
+                  styles.promoBadge,
+                  { backgroundColor: colors.success },
+                ]}
+              >
+                <MaterialCommunityIcons name="tag" size={10} color="#FFFFFF" />
+                <Text style={styles.promoBadgeText}>{etiqueta}</Text>
+              </View>
+            ) : null}
           </View>
         );
       }
 
       if (productMode === 'list') {
         return (
-          <ProductListItem
-            producto={item}
-            onPress={() => void onAgregar(item)}
-            isLast={index === productosFiltrados.length - 1}
-          />
+          <View>
+            <ProductListItem
+              producto={item}
+              onPress={() => void onAgregar(item)}
+              isLast={index === productosFiltrados.length - 1}
+            />
+            {tiene ? (
+              <View
+                pointerEvents="none"
+                style={[
+                  styles.promoBadgeList,
+                  { backgroundColor: colors.success },
+                ]}
+              >
+                <MaterialCommunityIcons name="tag" size={10} color="#FFFFFF" />
+                <Text style={styles.promoBadgeText}>{etiqueta}</Text>
+              </View>
+            ) : null}
+          </View>
         );
       }
 
       return (
-        <ProductCompactItem
-          producto={item}
-          onPress={() => void onAgregar(item)}
-          isLast={index === productosFiltrados.length - 1}
-        />
+        <View>
+          <ProductCompactItem
+            producto={item}
+            onPress={() => void onAgregar(item)}
+            isLast={index === productosFiltrados.length - 1}
+          />
+          {tiene ? (
+            <View
+              pointerEvents="none"
+              style={[
+                styles.promoBadgeList,
+                { backgroundColor: colors.success },
+              ]}
+            >
+              <MaterialCommunityIcons name="tag" size={10} color="#FFFFFF" />
+              <Text style={styles.promoBadgeText}>{etiqueta}</Text>
+            </View>
+          ) : null}
+        </View>
       );
     };
 
     return (
       <View style={styles.productosSection}>
-        {/* Fila de búsqueda + toggle */}
         <View style={styles.searchWrapper}>
           <View
             style={[styles.searchBox, { backgroundColor: colors.bgSubtle }]}
@@ -446,10 +560,7 @@ export default function POSScreen(): React.ReactElement {
             ) : null}
           </View>
 
-          <ProductViewToggle
-            mode={productMode}
-            onChange={setProductMode}
-          />
+          <ProductViewToggle mode={productMode} onChange={setProductMode} />
 
           <Pressable
             onPress={abrirScanner}
@@ -468,7 +579,6 @@ export default function POSScreen(): React.ReactElement {
           </Pressable>
         </View>
 
-        {/* Resultado */}
         {productosFiltrados.length === 0 ? (
           <RichEmptyState
             icon="package-variant"
@@ -486,9 +596,7 @@ export default function POSScreen(): React.ReactElement {
             numColumns={numColumns}
             key={`${productMode}-${numColumns}`}
             columnWrapperStyle={
-              productMode === 'grid'
-                ? { gap: spacing.sm }
-                : undefined
+              productMode === 'grid' ? { gap: spacing.sm } : undefined
             }
             contentContainerStyle={
               productMode === 'grid'
@@ -571,9 +679,7 @@ export default function POSScreen(): React.ReactElement {
             >
               Carrito vacío
             </Text>
-            <Text
-              style={[styles.emptyCartText, { color: colors.textMuted }]}
-            >
+            <Text style={[styles.emptyCartText, { color: colors.textMuted }]}>
               Toca un producto para agregarlo
             </Text>
           </View>
@@ -609,6 +715,24 @@ export default function POSScreen(): React.ReactElement {
             {formatCurrency(subtotal())}
           </Text>
         </View>
+
+        {descuentoPromociones() > 0 ? (
+          <View style={styles.totalRow}>
+            <View style={styles.discountLabelRow}>
+              <MaterialCommunityIcons
+                name="tag-outline"
+                size={14}
+                color={colors.success}
+              />
+              <Text style={[styles.totalLabel, { color: colors.success }]}>
+                Promociones
+              </Text>
+            </View>
+            <Text style={[styles.discountValue, { color: colors.success }]}>
+              −{formatCurrency(descuentoPromociones())}
+            </Text>
+          </View>
+        ) : null}
 
         <Pressable
           onPress={() => {
@@ -869,7 +993,9 @@ export default function POSScreen(): React.ReactElement {
         ) : (
           <View style={styles.mobileLayout}>
             <View style={styles.mobileTop}>{renderProductos()}</View>
-            <View style={styles.mobileBottom}>{renderCarrito()}</View>
+            <View style={[styles.mobileBottom, { height: cartIdealHeight }]}>
+              {renderCarrito()}
+            </View>
           </View>
         )}
       </KeyboardAvoidingView>
@@ -1032,8 +1158,8 @@ const styles = StyleSheet.create({
   splitRight: { width: 400 },
 
   mobileLayout: { flex: 1 },
-  mobileTop: { flex: 1 },
-  mobileBottom: { flex: 1 },
+  mobileTop: { flex: 1, minHeight: 180 },
+  mobileBottom: { flexShrink: 0 },
 
   productosSection: { flex: 1 },
   searchWrapper: {
@@ -1070,6 +1196,34 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.lg,
     gap: spacing.sm,
+  },
+  promoBadge: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: radius.sm,
+  },
+  promoBadgeList: {
+    position: 'absolute',
+    top: 10,
+    right: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: radius.sm,
+  },
+  promoBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
   productosList: {
     paddingBottom: spacing.lg,

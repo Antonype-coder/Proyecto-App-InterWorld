@@ -32,7 +32,7 @@ export default function CartItem({
   const atMax = item.cantidad >= item.producto.stock;
   const atMin = item.cantidad <= 1;
 
-  // Modo COMPACTA: una sola línea por item
+  // Modo COMPACTA
   if (mode === 'compact') {
     return (
       <View
@@ -91,7 +91,7 @@ export default function CartItem({
     );
   }
 
-  // Modo DETALLADA: con thumbnail, código y stock
+  // Modo DETALLADA
   if (mode === 'detailed') {
     const imageUrl = getImageUrl(
       item.producto.imagenes?.[0] ?? item.producto.imagen,
@@ -106,10 +106,7 @@ export default function CartItem({
         ]}
       >
         <View
-          style={[
-            styles.thumbWrap,
-            { backgroundColor: colors.bgSubtle },
-          ]}
+          style={[styles.thumbWrap, { backgroundColor: colors.bgSubtle }]}
         >
           {imageUrl ? (
             <Image
@@ -216,7 +213,13 @@ export default function CartItem({
     );
   }
 
-  // Modo CÓMODA (default)
+  // ============================================================
+  // Modo CÓMODA — GRANDE y bien visible
+  // ============================================================
+  const imageUrl = getImageUrl(
+    item.producto.imagenes?.[0] ?? item.producto.imagen,
+  );
+
   return (
     <View
       style={[
@@ -225,83 +228,167 @@ export default function CartItem({
         isLast ? styles.last : null,
       ]}
     >
-      <View style={styles.info}>
-        <Text
-          style={[styles.nombre, { color: colors.textPrimary }]}
-          numberOfLines={1}
-        >
-          {item.producto.nombre}
-        </Text>
-        <Text style={[styles.precio, { color: colors.textMuted }]}>
-          {formatCurrency(item.producto.precio_venta)} × {item.cantidad}
+      {/* Fila superior: nombre + subtotal grande */}
+      <View style={styles.topRow}>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text
+            style={[styles.nombre, { color: colors.textPrimary }]}
+            numberOfLines={2}
+          >
+            {item.producto.nombre}
+          </Text>
+
+          <Text style={[styles.precio, { color: colors.textSecondary }]}>
+            {formatCurrency(item.producto.precio_venta)} c/u
+          </Text>
+        </View>
+
+        <Text style={[styles.subtotal, { color: colors.textPrimary }]}>
+          {formatCurrency(subtotal)}
         </Text>
       </View>
 
-      <View
-        style={[
-          styles.stepper,
-          { borderColor: colors.border, backgroundColor: colors.surface },
-        ]}
-      >
-        <Pressable
-          onPress={atMin ? onRemove : onDecrement}
-          style={({ pressed }) => [
-            styles.stepBtn,
-            pressed ? { backgroundColor: colors.surfacePressed } : null,
-          ]}
-          accessibilityLabel={atMin ? 'Quitar' : 'Disminuir'}
-        >
-          <MaterialCommunityIcons
-            name={atMin ? 'trash-can-outline' : 'minus'}
-            size={14}
-            color={atMin ? colors.danger : colors.textPrimary}
-          />
-        </Pressable>
+      {/* Fila inferior: stepper grande + código */}
+      <View style={styles.bottomRow}>
+        <View style={styles.bottomInfo}>
+          <View
+            style={[
+              styles.miniThumb,
+              { backgroundColor: colors.bgSubtle },
+            ]}
+          >
+            {imageUrl ? (
+              <Image
+                source={{ uri: imageUrl }}
+                style={styles.thumbImage}
+                contentFit="cover"
+                cachePolicy="disk"
+              />
+            ) : (
+              <MaterialCommunityIcons
+                name="package-variant-closed"
+                size={14}
+                color={colors.textMuted}
+              />
+            )}
+          </View>
 
-        <Text style={[styles.stepValue, { color: colors.textPrimary }]}>
-          {item.cantidad}
-        </Text>
+          <Text
+            style={[styles.codigo, { color: colors.textMuted }]}
+            numberOfLines={1}
+          >
+            {item.producto.codigo_barras}
+          </Text>
+        </View>
 
-        <Pressable
-          onPress={onIncrement}
-          disabled={atMax}
-          style={({ pressed }) => [
-            styles.stepBtn,
-            pressed && !atMax
-              ? { backgroundColor: colors.surfacePressed }
-              : null,
-            atMax ? { opacity: 0.4 } : null,
+        <View
+          style={[
+            styles.stepper,
+            { borderColor: colors.border, backgroundColor: colors.surface },
           ]}
-          accessibilityLabel="Aumentar"
         >
-          <MaterialCommunityIcons
-            name="plus"
-            size={14}
-            color={colors.textPrimary}
-          />
-        </Pressable>
+          <Pressable
+            onPress={atMin ? onRemove : onDecrement}
+            style={({ pressed }) => [
+              styles.stepBtn,
+              pressed ? { backgroundColor: colors.surfacePressed } : null,
+            ]}
+            accessibilityLabel={atMin ? 'Quitar' : 'Disminuir'}
+          >
+            <MaterialCommunityIcons
+              name={atMin ? 'trash-can-outline' : 'minus'}
+              size={18}
+              color={atMin ? colors.danger : colors.textPrimary}
+            />
+          </Pressable>
+
+          <Text style={[styles.stepValue, { color: colors.textPrimary }]}>
+            {item.cantidad}
+          </Text>
+
+          <Pressable
+            onPress={onIncrement}
+            disabled={atMax}
+            style={({ pressed }) => [
+              styles.stepBtn,
+              pressed && !atMax
+                ? { backgroundColor: colors.surfacePressed }
+                : null,
+              atMax ? { opacity: 0.4 } : null,
+            ]}
+            accessibilityLabel="Aumentar"
+          >
+            <MaterialCommunityIcons
+              name="plus"
+              size={18}
+              color={colors.textPrimary}
+            />
+          </Pressable>
+        </View>
       </View>
-
-      <Text style={[styles.subtotal, { color: colors.textPrimary }]}>
-        {formatCurrency(subtotal)}
-      </Text>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  // ============ CÓMODA ============
+  // ============ CÓMODA (GRANDE) ============
   container: {
-    flexDirection: 'row',
-    alignItems: 'center',
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
     gap: spacing.sm,
   },
   last: { borderBottomWidth: 0 },
-  info: { flex: 1, minWidth: 0 },
-  nombre: { ...typography.bodyBold },
-  precio: { ...typography.small, marginTop: 2 },
+
+  topRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  nombre: {
+    ...typography.bodyBold,
+    fontSize: 16,
+    lineHeight: 22,
+  },
+  precio: {
+    ...typography.small,
+    marginTop: 3,
+  },
+  subtotal: {
+    ...typography.bodyBold,
+    fontSize: 18,
+    lineHeight: 24,
+    minWidth: 90,
+    textAlign: 'right',
+  },
+
+  bottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  bottomInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flex: 1,
+    minWidth: 0,
+  },
+  miniThumb: {
+    width: 26,
+    height: 26,
+    borderRadius: radius.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  thumbImage: { width: '100%', height: '100%' },
+  codigo: {
+    ...typography.tiny,
+    flex: 1,
+    minWidth: 0,
+  },
+
   stepper: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -309,20 +396,16 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   stepBtn: {
-    width: 30,
-    height: 30,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepValue: {
     ...typography.bodyBold,
-    minWidth: 26,
+    fontSize: 16,
+    minWidth: 36,
     textAlign: 'center',
-  },
-  subtotal: {
-    ...typography.bodyBold,
-    minWidth: 78,
-    textAlign: 'right',
   },
 
   // ============ COMPACTA ============
@@ -374,7 +457,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  thumbImage: { width: '100%', height: '100%' },
   detailedInfo: { flex: 1, minWidth: 0, gap: 4 },
   detailedHeader: {
     flexDirection: 'row',

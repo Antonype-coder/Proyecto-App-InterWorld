@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
@@ -315,6 +316,62 @@ export default function ProductoFormScreen(): React.ReactElement {
     });
   };
 
+  const rotarFoto = async (index: number): Promise<void> => {
+    const foto = fotos[index];
+
+    if (!foto) return;
+
+    if (!foto.file) {
+      setToast({
+        visible: true,
+        message: 'Las fotos descargadas de internet no se pueden girar aquí.',
+        variant: 'info',
+      });
+      return;
+    }
+
+    try {
+      const result = await ImageManipulator.manipulateAsync(
+        foto.file.uri,
+        [{ rotate: 90 }],
+        {
+          compress: 0.9,
+          format: ImageManipulator.SaveFormat.JPEG,
+        },
+      );
+
+      setFotos((current) =>
+        current.map((f, i) =>
+          i === index
+            ? {
+                path: result.uri,
+                file: {
+                  uri: result.uri,
+                  name: f.file?.name ?? `producto-${Date.now()}.jpg`,
+                  type: 'image/jpeg',
+                },
+              }
+            : f,
+        ),
+      );
+
+      await Haptics.impactAsync(
+        Haptics.ImpactFeedbackStyle.Light,
+      );
+    } catch (e) {
+      const msg =
+        e instanceof Error
+          ? e.message
+          : 'No se pudo girar la imagen';
+
+      setToast({
+        visible: true,
+        message: msg,
+        variant: 'error',
+      });
+    }
+  };
+
   const seleccionarFoto = async (): Promise<void> => {
     const disponibles = 8 - fotos.length;
 
@@ -379,9 +436,8 @@ export default function ProductoFormScreen(): React.ReactElement {
 
       const result =
         await ImagePicker.launchCameraAsync({
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 0.8,
+          allowsEditing: false,
+          quality: 0.85,
         });
 
       if (!result.canceled) {
@@ -621,6 +677,9 @@ export default function ProductoFormScreen(): React.ReactElement {
           <ProductoImageCarousel
             images={fotos.map((foto) => foto.path)}
             height={190}
+            onRotate={(index) => {
+              void rotarFoto(index);
+            }}
             onRemove={(index) =>
               setFotos((current) =>
                 current.filter((_, i) => i !== index),
@@ -1128,3 +1187,4 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
 });
+

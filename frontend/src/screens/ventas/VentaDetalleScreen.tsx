@@ -212,40 +212,82 @@ export default function VentaDetalleScreen(): React.ReactElement {
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
             Productos ({venta.detalle.length})
           </Text>
-          {venta.detalle.map((item, idx) => (
-            <View
-              key={item.id}
-              style={[
-                styles.detalleItem,
-                { borderTopColor: colors.border },
-                idx === venta.detalle.length - 1
-                  ? styles.detalleItemLast
-                  : null,
-              ]}
-            >
-              <View style={styles.detalleInfo}>
-                <Text
-                  style={[styles.detalleNombre, { color: colors.textPrimary }]}
-                  numberOfLines={1}
-                >
-                  {item.producto_nombre}
-                </Text>
-                <Text
-                  style={[styles.detalleSub, { color: colors.textMuted }]}
-                >
-                  {formatCurrency(item.precio_unitario)} × {item.cantidad}
-                </Text>
-              </View>
-              <Text
+          {venta.detalle.map((item, idx) => {
+            const subtotalBruto = parseFloat(item.subtotal);
+            const descLinea = parseFloat((item as any).descuento ?? '0') || 0;
+            const subtotalNeto = Math.max(0, subtotalBruto - descLinea);
+            const tieneDesc = descLinea > 0.001;
+
+            return (
+              <View
+                key={item.id}
                 style={[
-                  styles.detalleSubtotal,
-                  { color: colors.textPrimary },
+                  styles.detalleItem,
+                  { borderTopColor: colors.border },
+                  idx === venta.detalle.length - 1
+                    ? styles.detalleItemLast
+                    : null,
                 ]}
               >
-                {formatCurrency(item.subtotal)}
-              </Text>
-            </View>
-          ))}
+                <View style={styles.detalleInfo}>
+                  <Text
+                    style={[
+                      styles.detalleNombre,
+                      { color: colors.textPrimary },
+                    ]}
+                    numberOfLines={2}
+                  >
+                    {item.producto_nombre}
+                  </Text>
+
+                  <Text
+                    style={[styles.detalleSub, { color: colors.textMuted }]}
+                  >
+                    {formatCurrency(item.precio_unitario)} × {item.cantidad}
+                  </Text>
+
+                  {tieneDesc ? (
+                    <View style={styles.detallePromoRow}>
+                      <MaterialCommunityIcons
+                        name="tag-outline"
+                        size={12}
+                        color={colors.success}
+                      />
+                      <Text
+                        style={[
+                          styles.detallePromoText,
+                          { color: colors.success },
+                        ]}
+                      >
+                        Promoción −{formatCurrency(descLinea)}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+
+                <View style={{ alignItems: 'flex-end' }}>
+                  {tieneDesc ? (
+                    <Text
+                      style={[
+                        styles.detalleBruto,
+                        { color: colors.textMuted },
+                      ]}
+                    >
+                      {formatCurrency(subtotalBruto)}
+                    </Text>
+                  ) : null}
+                  <Text
+                    style={[
+                      styles.detalleSubtotal,
+                      { color: colors.textPrimary },
+                    ]}
+                  >
+                    {formatCurrency(subtotalNeto)}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
         </Card>
 
         <Card variant="default" style={styles.section}>
@@ -415,10 +457,24 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
   },
   detalleItemLast: { borderBottomWidth: 0 },
-  detalleInfo: { flex: 1 },
+  detalleInfo: { flex: 1, minWidth: 0 },
   detalleNombre: { ...typography.body },
   detalleSub: { ...typography.small, marginTop: 2 },
-  detalleSubtotal: { ...typography.bodyBold },
+  detallePromoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 4,
+  },
+  detallePromoText: {
+    ...typography.small,
+    fontFamily: typography.button.fontFamily,
+  },
+  detalleBruto: {
+    ...typography.small,
+    textDecorationLine: 'line-through',
+  },
+  detalleSubtotal: { ...typography.bodyBold, marginTop: 2 },
   totalRow: {
     flexDirection: 'row',
     alignItems: 'center',

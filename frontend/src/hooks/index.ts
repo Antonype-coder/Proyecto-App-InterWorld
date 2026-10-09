@@ -21,3 +21,4 @@ export type { ReturnTo } from './useReturnTo';
 export type { CajaResumen } from './useCajaResumen';
 export type { CartViewMode } from './useViewMode';
 export type { ProductViewMode } from './useProductViewMode';
+export * from './useFocusedLoad';

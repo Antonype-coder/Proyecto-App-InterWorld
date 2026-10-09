@@ -16,6 +16,8 @@ export type { Proveedor, ProveedorInput } from './proveedor';
 // Producto
 export type { Producto, ProductoInput } from './producto';
 
+export type { RegisterNegocioRequest } from './auth';
+
 // Cliente
 export type {
   Cliente,

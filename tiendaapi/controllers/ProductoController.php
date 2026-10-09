@@ -78,6 +78,23 @@ if (!class_exists('ProductoController')) {
             Response::success($this->productos->stockBajo(), 'Productos con stock bajo.');
         }
 
+        /**
+         * Estadísticas reales de ventas del producto (con descuentos aplicados).
+         */
+        public function estadisticas(Request $request): void
+        {
+            $id = (int) $request->param('id');
+
+            $p = $this->productos->find($id);
+            if ($p === null) {
+                throw new NotFoundException('Producto no encontrado.');
+            }
+
+            $stats = $this->productos->estadisticas($id);
+
+            Response::success($stats, 'Estadísticas obtenidas correctamente.');
+        }
+
         public function store(Request $request): void
         {
             $data = $request->all();

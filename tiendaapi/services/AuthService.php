@@ -40,9 +40,14 @@ if (!class_exists('AuthService')) {
 
             $this->usuarios->registroLogin((int) $usuario['id']);
 
+            $negocioId = (int) ($usuario['negocio_id'] ?? 0);
+            if ($negocioId <= 0) {
+                throw new UnauthorizedException('Usuario sin negocio asignado.');
+            }
+
             $token = Jwt::encode([
                 'sub'        => (int) $usuario['id'],
-                'negocio_id' => (int) ($usuario['negocio_id'] ?? 1),
+                'negocio_id' => $negocioId,
                 'email'      => $usuario['email'],
                 'nombre'     => $usuario['nombre'],
                 'rol'        => $usuario['rol'],
@@ -54,7 +59,7 @@ if (!class_exists('AuthService')) {
                 'token' => $token,
                 'user'  => [
                     'id'         => (int) $usuario['id'],
-                    'negocio_id' => (int) ($usuario['negocio_id'] ?? 1),
+                    'negocio_id' => $negocioId,
                     'nombre'     => $usuario['nombre'],
                     'email'      => $usuario['email'],
                     'rol'        => $usuario['rol'],
@@ -86,7 +91,7 @@ if (!class_exists('AuthService')) {
 
             $this->db->beginTransaction();
             try {
-                // 1. Crear el negocio
+                // 1. Negocio
                 $stmt = $this->db->prepare(
                     "INSERT INTO negocios (nombre, nit, telefono, email, plan, activo)
                      VALUES (:n, :nit, :tel, :email, 'free', 1)"
@@ -99,7 +104,7 @@ if (!class_exists('AuthService')) {
                 ]);
                 $negocioId = (int)$this->db->lastInsertId();
 
-                // 2. Crear admin
+                // 2. Admin
                 $stmt = $this->db->prepare(
                     "INSERT INTO usuarios (negocio_id, nombre, email, password_hash, rol, activo)
                      VALUES (:nid, :nom, :email, :pass, 'admin', 1)"
@@ -112,6 +117,14 @@ if (!class_exists('AuthService')) {
                 ]);
                 $userId = (int)$this->db->lastInsertId();
 
+                // 3. Configuración por defecto de ESTE negocio
+                $this->crearConfiguracionDefault($negocioId, [
+                    'nombre'   => $negocioNombre,
+                    'nit'      => $nit,
+                    'telefono' => $telefono,
+                    'email'    => $email,
+                ]);
+
                 $this->db->commit();
             } catch (Throwable $e) {
                 if ($this->db->inTransaction()) {
@@ -120,7 +133,6 @@ if (!class_exists('AuthService')) {
                 throw $e;
             }
 
-            // 3. Generar token
             $token = Jwt::encode([
                 'sub'        => $userId,
                 'negocio_id' => $negocioId,
@@ -154,7 +166,13 @@ if (!class_exists('AuthService')) {
                 throw new ConflictException('Ya existe un usuario con ese correo.');
             }
 
+            $negocioId = Auth::negocioId();
+            if ($negocioId === null) {
+                throw new ForbiddenException('No se pudo determinar el negocio.');
+            }
+
             $id = $this->usuarios->create([
+                'negocio_id'    => $negocioId,
                 'nombre'        => trim($data['nombre']),
                 'email'         => $email,
                 'password_hash' => password_hash($data['password'], PASSWORD_BCRYPT),
@@ -174,6 +192,50 @@ if (!class_exists('AuthService')) {
                 throw new UnauthorizedException('Usuario no encontrado.');
             }
             return $usuario;
+        }
+
+        private function crearConfiguracionDefault(int $negocioId, array $negocio): void
+        {
+            $defaults = [
+                ['negocio_nombre',            $negocio['nombre']   ?? 'Mi Tienda', 'string',  'negocio'],
+                ['negocio_nit',               $negocio['nit']      ?? '',          'string',  'negocio'],
+                ['negocio_direccion',         '',                                  'string',  'negocio'],
+                ['negocio_telefono',          $negocio['telefono'] ?? '',          'string',  'negocio'],
+                ['negocio_email',             $negocio['email']    ?? '',          'string',  'negocio'],
+                ['moneda_simbolo',            '$',                                 'string',  'moneda'],
+                ['moneda_codigo',             'COP',                               'string',  'moneda'],
+                ['impuesto_porcentaje',       '0',                                 'decimal', 'impuestos'],
+                ['impuesto_incluido',         '1',                                 'boolean', 'impuestos'],
+                ['folio_prefijo_venta',       'V',                                 'string',  'folios'],
+                ['folio_prefijo_devolucion',  'D',                                 'string',  'folios'],
+                ['folio_prefijo_orden_compra','OC',                                'string',  'folios'],
+                ['stock_alerta_habilitada',   '1',                                 'boolean', 'notificaciones'],
+                ['notif_stock_bajo',          '1',                                 'boolean', 'notificaciones'],
+                ['notif_ventas_dia',          '1',                                 'boolean', 'notificaciones'],
+                ['notif_deudas_vencidas',     '1',                                 'boolean', 'notificaciones'],
+                ['tema_modo',                 'light',                             'string',  'apariencia'],
+                ['tema_color_primario',       '#111827',                           'string',  'apariencia'],
+                ['caja_monto_apertura_defecto','0',                                'decimal', 'caja'],
+            ];
+
+            $stmt = $this->db->prepare(
+                "INSERT INTO configuracion (negocio_id, clave, valor, tipo, grupo)
+                 VALUES (:nid, :clave, :valor, :tipo, :grupo)"
+            );
+
+            foreach ($defaults as [$clave, $valor, $tipo, $grupo]) {
+                try {
+                    $stmt->execute([
+                        'nid'   => $negocioId,
+                        'clave' => $clave,
+                        'valor' => (string) $valor,
+                        'tipo'  => $tipo,
+                        'grupo' => $grupo,
+                    ]);
+                } catch (Throwable $e) {
+                    // Ignorar duplicados
+                }
+            }
         }
     }
 }

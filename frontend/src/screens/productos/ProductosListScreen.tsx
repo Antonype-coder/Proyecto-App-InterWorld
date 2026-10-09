@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 
 import { radius, spacing, typography } from '@theme/index';
@@ -19,6 +19,7 @@ import { useAuthStore } from '@store/authStore';
 import { useColors } from '@hooks/useColors';
 import { useProductosStore } from '@store/productosStore';
 import { useDebounce } from '@hooks/useDebounce';
+import { useFocusedLoad } from '@hooks/useFocusedLoad';
 import { FadeInItem } from '@components/animations';
 import ProductoItem from '@components/domain/ProductoItem';
 import FAB from '@components/ui/FAB';
@@ -43,6 +44,7 @@ export default function ProductosListScreen(): React.ReactElement {
   const [busqueda, setBusqueda] = useState('');
   const [categoriaFiltro, setCategoriaFiltro] = useState<number | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const isFirstLoad = useRef(true);
 
   const esAdmin = user?.rol === 'admin';
   const debouncedBusqueda = useDebounce(busqueda, 400);
@@ -57,11 +59,9 @@ export default function ProductosListScreen(): React.ReactElement {
     ]);
   }, [debouncedBusqueda, categoriaFiltro, cargar, cargarCategorias]);
 
-  useFocusEffect(
-    useCallback(() => {
-      void cargarDatos();
-    }, [cargarDatos]),
-  );
+  // ⚡ Solo carga la primera vez (bloquea con skeleton)
+  // Después refresca en background sin bloquear la UI
+  useFocusedLoad(cargarDatos);
 
   const onRefresh = async (): Promise<void> => {
     setRefreshing(true);

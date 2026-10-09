@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../models/Venta.php';
 require_once __DIR__ . '/../core/Logger.php';
+require_once __DIR__ . '/../core/Auth.php';
 require_once __DIR__ . '/../core/Exceptions/BusinessException.php';
 require_once __DIR__ . '/../core/Exceptions/NotFoundException.php';
 require_once __DIR__ . '/../config/database.php';
@@ -51,10 +52,6 @@ if (!class_exists('VentaService')) {
 
             Logger::info('Venta creada', ['venta_id' => $ventaId, 'user_id' => $usuarioId]);
 
-            // ================================================================
-            // NUEVO: registrar la venta en caja_movimientos
-            // para que aparezca en el turno y en el cierre de caja.
-            // ================================================================
             try {
                 $this->registrarMovimientoCaja(
                     $ventaId,
@@ -63,13 +60,11 @@ if (!class_exists('VentaService')) {
                     (string) ($data['metodo_pago'] ?? 'efectivo')
                 );
             } catch (Throwable $e) {
-                // No rompemos la venta si falla el registro en caja.
                 Logger::warning('No se pudo registrar venta en caja_movimientos: ' . $e->getMessage(), [
                     'venta_id' => $ventaId,
                 ]);
             }
 
-            // Otorgar puntos de lealtad si hay cliente.
             if (!empty($datosVenta['cliente_id'])) {
                 try {
                     require_once __DIR__ . '/LealtadService.php';
@@ -98,7 +93,6 @@ if (!class_exists('VentaService')) {
 
         /**
          * Inserta la venta en caja_movimientos asociada a la sesión de caja abierta.
-         * Si no hay caja abierta, no inserta nada (la venta sigue siendo válida).
          */
         private function registrarMovimientoCaja(
             int $ventaId,
@@ -106,49 +100,51 @@ if (!class_exists('VentaService')) {
             ?int $sesionIdPropuesta,
             string $metodoPago
         ): void {
-            // Validar método de pago. Si viene algo raro, forzamos 'efectivo'.
             $metodosValidos = ['efectivo', 'tarjeta', 'transferencia', 'otro'];
             if (!in_array($metodoPago, $metodosValidos, true)) {
                 $metodoPago = 'efectivo';
             }
 
-            // Buscar la sesión de caja: la propuesta, o la abierta del usuario.
+            $nid = Auth::negocioId();
+            if ($nid === null) return;
+
+            // Buscar la sesión de caja: la propuesta, o la abierta del usuario (del mismo negocio).
             $sesionId = $sesionIdPropuesta;
             if ($sesionId === null) {
                 $stmt = $this->db->prepare(
                     "SELECT id FROM caja_sesiones
-                     WHERE usuario_id = :uid AND estado = 'abierta'
+                     WHERE usuario_id = :uid AND negocio_id = :nid AND estado = 'abierta'
                      ORDER BY id DESC LIMIT 1"
                 );
-                $stmt->execute(['uid' => $usuarioId]);
+                $stmt->execute(['uid' => $usuarioId, 'nid' => $nid]);
                 $row = $stmt->fetch();
                 $sesionId = $row !== false ? (int) $row['id'] : null;
             }
 
             if ($sesionId === null) {
-                // No hay caja abierta: no registramos en caja.
                 return;
             }
 
-            // Obtener el total y número de la venta para el movimiento.
             $stmtVenta = $this->db->prepare(
-                "SELECT numero, total FROM ventas WHERE id = :id LIMIT 1"
+                "SELECT numero, total FROM ventas WHERE id = :id AND negocio_id = :nid LIMIT 1"
             );
-            $stmtVenta->execute(['id' => $ventaId]);
+            $stmtVenta->execute(['id' => $ventaId, 'nid' => $nid]);
             $ventaRow = $stmtVenta->fetch();
             if ($ventaRow === false) {
                 return;
             }
 
+            // UNA sola ejecución, con negocio_id
             $stmt = $this->db->prepare(
                 "INSERT INTO caja_movimientos
-                    (caja_sesion_id, usuario_id, tipo, monto, metodo_pago,
+                    (negocio_id, caja_sesion_id, usuario_id, tipo, monto, metodo_pago,
                      referencia_tipo, referencia_id, descripcion)
                  VALUES
-                    (:sid, :uid, 'venta', :monto, :metodo,
+                    (:nid, :sid, :uid, 'venta', :monto, :metodo,
                      'venta', :ref_id, :desc)"
             );
             $stmt->execute([
+                'nid'    => $nid,
                 'sid'    => $sesionId,
                 'uid'    => $usuarioId,
                 'monto'  => number_format((float) $ventaRow['total'], 2, '.', ''),

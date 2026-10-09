@@ -18,12 +18,14 @@ interface ProductoImageCarouselProps {
   images: string[];
   height: number;
   onRemove?: (index: number) => void;
+  onRotate?: (index: number) => void;
 }
 
 export default function ProductoImageCarousel({
   images,
   height,
   onRemove,
+  onRotate,
 }: ProductoImageCarouselProps): React.ReactElement {
   const colors = useColors();
   const scrollRef = useRef<ScrollView>(null);
@@ -45,10 +47,7 @@ export default function ProductoImageCarousel({
 
   return (
     <View
-      style={[
-        styles.container,
-        { height, backgroundColor: colors.bgSubtle },
-      ]}
+      style={[styles.container, { height, backgroundColor: colors.bgSubtle }]}
       onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
       accessibilityLabel={
         images.length > 1
@@ -110,23 +109,33 @@ export default function ProductoImageCarousel({
             </View>
           ) : null}
 
-          {onRemove ? (
-            <Pressable
-              onPress={() => onRemove(visibleIndex)}
-              style={[
-                styles.removeButton,
-                { backgroundColor: colors.danger },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel="Quitar esta foto"
-            >
-              <MaterialCommunityIcons
-                name="close"
-                size={18}
-                color="#FFFFFF"
-              />
-            </Pressable>
-          ) : null}
+          <View style={styles.actions}>
+            {onRotate ? (
+              <Pressable
+                onPress={() => onRotate(visibleIndex)}
+                style={[styles.actionButton, { backgroundColor: colors.primary }]}
+                accessibilityRole="button"
+                accessibilityLabel="Girar esta foto"
+              >
+                <MaterialCommunityIcons
+                  name="rotate-right"
+                  size={18}
+                  color="#FFFFFF"
+                />
+              </Pressable>
+            ) : null}
+
+            {onRemove ? (
+              <Pressable
+                onPress={() => onRemove(visibleIndex)}
+                style={[styles.actionButton, { backgroundColor: colors.danger }]}
+                accessibilityRole="button"
+                accessibilityLabel="Quitar esta foto"
+              >
+                <MaterialCommunityIcons name="close" size={18} color="#FFFFFF" />
+              </Pressable>
+            ) : null}
+          </View>
 
           {images.length > 1 ? (
             <View style={styles.dots}>
@@ -140,10 +149,7 @@ export default function ProductoImageCarousel({
                     styles.dot,
                     { backgroundColor: colors.bgMuted },
                     index === visibleIndex
-                      ? [
-                          styles.activeDot,
-                          { backgroundColor: colors.primary },
-                        ]
+                      ? [styles.activeDot, { backgroundColor: colors.primary }]
                       : null,
                   ]}
                 />
@@ -186,10 +192,14 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(17, 24, 39, 0.72)',
   },
   counterText: { ...typography.small },
-  removeButton: {
+  actions: {
     position: 'absolute',
     right: spacing.sm,
     top: spacing.sm,
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  actionButton: {
     width: 32,
     height: 32,
     borderRadius: radius.md,

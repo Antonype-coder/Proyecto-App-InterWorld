@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 
 import { radius, spacing, typography } from '@theme/index';
 import { useColors } from '@hooks/useColors';
@@ -18,6 +18,7 @@ import TopBar from '@components/layout/TopBar';
 import { clientesApi } from '@api/index';
 import type { Cliente } from '@tipos/index';
 import { useDebounce } from '@hooks/useDebounce';
+import { useFocusedLoad } from '@hooks/useFocusedLoad';
 import { FadeInItem } from '@components/animations';
 import ClienteItem from '@components/domain/ClienteItem';
 import FAB from '@components/ui/FAB';
@@ -34,6 +35,7 @@ export default function ClientesListScreen(): React.ReactElement {
   const [error, setError] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState('');
   const [soloConDeuda, setSoloConDeuda] = useState(false);
+  const isFirstLoad = useRef(true);
 
   const debouncedBusqueda = useDebounce(busqueda, 400);
 
@@ -46,19 +48,17 @@ export default function ClientesListScreen(): React.ReactElement {
       });
       setClientes(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error al cargar');
+      const msg = e instanceof Error ? e.message : 'Error al cargar';
+      if (clientes.length === 0) setError(msg);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [debouncedBusqueda]);
 
-  useFocusEffect(
-    useCallback(() => {
-      setLoading(true);
-      void cargar();
-    }, [cargar]),
-  );
+  // ⚡ Solo bloquea la primera vez; después refresca en background
+  useFocusedLoad(cargar, () => setLoading(true));
 
   const clientesFiltrados = soloConDeuda
     ? clientes.filter((c) => parseFloat(c.saldo_deuda) > 0)

@@ -27,6 +27,8 @@ import HistorialCajaScreen from '@screens/caja/HistorialCajaScreen';
 import MovimientoCajaFormScreen from '@screens/caja/MovimientoCajaFormScreen';
 import ReportesScreen from '@screens/reportes/ReportesScreen';
 import UsuariosScreen from '@screens/usuarios/UsuariosScreen';
+import { UsuarioFormScreen } from '@screens/usuarios/UsuarioFormScreen';
+import { UsuarioDetalleScreen } from '@screens/usuarios/UsuarioDetalleScreen';
 import DevolucionesListScreen from '@screens/devoluciones/DevolucionesListScreen';
 import DevolucionDetalleScreen from '@screens/devoluciones/DevolucionDetalleScreen';
 import PromocionesListScreen from '@screens/promociones/PromocionesListScreen';
@@ -86,6 +88,16 @@ export default function MasStack(): React.ReactElement {
       {/* Administración */}
       <Stack.Screen name="Reportes" component={ReportesScreen} />
       <Stack.Screen name="Usuarios" component={UsuariosScreen} />
+      <Stack.Screen
+        name="UsuarioForm"
+        component={UsuarioFormScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
+      <Stack.Screen
+        name="UsuarioDetalle"
+        component={UsuarioDetalleScreen}
+        options={{ animation: 'slide_from_right' }}
+      />
       <Stack.Screen name="Devoluciones" component={DevolucionesListScreen} />
       <Stack.Screen
         name="DevolucionDetalle"

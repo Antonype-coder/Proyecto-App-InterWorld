@@ -7,8 +7,8 @@ export type RootStackParamList = {
 
 export type AuthStackParamList = {
   Login: undefined;
-  ForgotPassword: undefined;
-  Pin: { mode?: 'verify' | 'set' } | undefined;
+  Register: undefined;
+  Pin: undefined;
 };
 
 export type DashboardStackParamList = {
@@ -68,7 +68,8 @@ export type ReportesStackParamList = {
 
 export type UsuariosStackParamList = {
   UsuariosList: undefined;
-  UsuarioForm: { usuarioId?: number } | undefined;
+  UsuarioForm: { userId?: number } | undefined;
+  UsuarioDetalle: { userId: number };
 };
 
 export type MasStackParamList = {
@@ -94,7 +95,12 @@ export type MasStackParamList = {
   CajaHistorial: undefined;
   CajaMovimientoForm: { sesionId: number };
   Reportes: undefined;
+
+  // Administración — Usuarios (agregadas)
   Usuarios: undefined;
+  UsuarioForm: { userId?: number } | undefined;
+  UsuarioDetalle: { userId: number };
+
   Devoluciones: undefined;
   DevolucionDetalle: { devolucionId: number };
   Promociones: undefined;

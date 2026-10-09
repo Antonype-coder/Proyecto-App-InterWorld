@@ -8,7 +8,6 @@ if (!class_exists('Auth')) {
 
         public static function setUser(array $payload): void
         {
-            // Guardamos en $GLOBALS (persiste siempre entre clases y archivos)
             $GLOBALS[self::GLOBAL_KEY] = $payload;
         }
 
@@ -22,6 +21,12 @@ if (!class_exists('Auth')) {
         {
             $u = self::user();
             return ($u !== null && isset($u['sub'])) ? (int) $u['sub'] : null;
+        }
+
+        public static function negocioId(): ?int
+        {
+            $u = self::user();
+            return ($u !== null && isset($u['negocio_id'])) ? (int) $u['negocio_id'] : null;
         }
 
         public static function email(): ?string

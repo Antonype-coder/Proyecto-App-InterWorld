@@ -8,6 +8,7 @@ if (!class_exists('Categoria')) {
     {
         protected string $table = 'categorias';
         protected string $primaryKey = 'id';
-        protected array $fillable = ['nombre', 'descripcion', 'activo'];
+        protected array $fillable = ['negocio_id', 'nombre', 'descripcion', 'activo'];
+        protected bool $tenantScoped = true;
     }
 }

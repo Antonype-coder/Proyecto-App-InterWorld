@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../core/Auth.php';
 require_once __DIR__ . '/../core/Exceptions/BusinessException.php';
 require_once __DIR__ . '/../core/Exceptions/NotFoundException.php';
 
@@ -15,8 +16,15 @@ if (!class_exists('PromocionService')) {
             $this->db = Database::getConnection();
         }
 
+        private function nid(): ?int
+        {
+            return class_exists('Auth') ? Auth::negocioId() : null;
+        }
+
         public function listar(array $filtros = []): array
         {
+            $nid = $this->nid();
+
             $sql = "SELECT p.*, prod.nombre AS producto_nombre, cat.nombre AS categoria_nombre
                     FROM promociones p
                     LEFT JOIN productos prod ON prod.id = p.producto_id
@@ -24,6 +32,10 @@ if (!class_exists('PromocionService')) {
                     WHERE 1=1";
             $params = [];
 
+            if ($nid !== null) {
+                $sql .= " AND p.negocio_id = :nid";
+                $params['nid'] = $nid;
+            }
             if (isset($filtros['activo'])) {
                 $sql .= " AND p.activo = :activo";
                 $params['activo'] = (int)$filtros['activo'];
@@ -40,14 +52,23 @@ if (!class_exists('PromocionService')) {
 
         public function obtener(int $id): array
         {
-            $stmt = $this->db->prepare(
-                "SELECT p.*, prod.nombre AS producto_nombre, cat.nombre AS categoria_nombre
-                 FROM promociones p
-                 LEFT JOIN productos prod ON prod.id = p.producto_id
-                 LEFT JOIN categorias cat ON cat.id = p.categoria_id
-                 WHERE p.id = :id LIMIT 1"
-            );
-            $stmt->execute(['id' => $id]);
+            $nid = $this->nid();
+
+            $sql = "SELECT p.*, prod.nombre AS producto_nombre, cat.nombre AS categoria_nombre
+                    FROM promociones p
+                    LEFT JOIN productos prod ON prod.id = p.producto_id
+                    LEFT JOIN categorias cat ON cat.id = p.categoria_id
+                    WHERE p.id = :id";
+            $params = ['id' => $id];
+
+            if ($nid !== null) {
+                $sql .= " AND p.negocio_id = :nid";
+                $params['nid'] = $nid;
+            }
+            $sql .= " LIMIT 1";
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
             $row = $stmt->fetch();
             if ($row === false) throw new NotFoundException('Promoción no encontrada.');
             return $row;
@@ -57,25 +78,31 @@ if (!class_exists('PromocionService')) {
         {
             $this->validar($data);
 
+            $nid = $this->nid();
+            if ($nid === null) {
+                throw new BusinessException('No se pudo determinar el negocio.');
+            }
+
             $stmt = $this->db->prepare(
                 "INSERT INTO promociones
-                 (nombre, descripcion, tipo, valor, aplica_a, producto_id, categoria_id,
+                 (negocio_id, nombre, descripcion, tipo, valor, aplica_a, producto_id, categoria_id,
                   cantidad_minima, fecha_inicio, fecha_fin, activo)
-                 VALUES (:nombre, :descripcion, :tipo, :valor, :aplica_a, :producto_id, :categoria_id,
+                 VALUES (:nid, :nombre, :descripcion, :tipo, :valor, :aplica_a, :producto_id, :categoria_id,
                          :cantidad_minima, :fecha_inicio, :fecha_fin, :activo)"
             );
             $stmt->execute([
-                'nombre' => trim((string)$data['nombre']),
-                'descripcion' => $data['descripcion'] ?? null,
-                'tipo' => (string)$data['tipo'],
-                'valor' => number_format((float)($data['valor'] ?? 0), 2, '.', ''),
-                'aplica_a' => (string)($data['aplica_a'] ?? 'producto'),
-                'producto_id' => !empty($data['producto_id']) ? (int)$data['producto_id'] : null,
-                'categoria_id' => !empty($data['categoria_id']) ? (int)$data['categoria_id'] : null,
+                'nid'             => $nid,
+                'nombre'          => trim((string)$data['nombre']),
+                'descripcion'     => $data['descripcion'] ?? null,
+                'tipo'            => (string)$data['tipo'],
+                'valor'           => number_format((float)($data['valor'] ?? 0), 2, '.', ''),
+                'aplica_a'        => (string)($data['aplica_a'] ?? 'producto'),
+                'producto_id'     => !empty($data['producto_id']) ? (int)$data['producto_id'] : null,
+                'categoria_id'    => !empty($data['categoria_id']) ? (int)$data['categoria_id'] : null,
                 'cantidad_minima' => (int)($data['cantidad_minima'] ?? 1),
-                'fecha_inicio' => $this->normalizarFecha((string)$data['fecha_inicio'], false),
-                'fecha_fin' => $this->normalizarFecha((string)$data['fecha_fin'], true),
-                'activo' => isset($data['activo']) ? (int)(bool)$data['activo'] : 1,
+                'fecha_inicio'    => $this->normalizarFecha((string)$data['fecha_inicio'], false),
+                'fecha_fin'       => $this->normalizarFecha((string)$data['fecha_fin'], true),
+                'activo'          => isset($data['activo']) ? (int)(bool)$data['activo'] : 1,
             ]);
 
             $id = (int)$this->db->lastInsertId();
@@ -121,6 +148,13 @@ if (!class_exists('PromocionService')) {
             if ($campos === []) throw new BusinessException('No hay campos para actualizar.');
 
             $sql = "UPDATE promociones SET " . implode(', ', $campos) . " WHERE id = :id";
+
+            $nid = $this->nid();
+            if ($nid !== null) {
+                $sql .= " AND negocio_id = :nid";
+                $params['nid'] = $nid;
+            }
+
             $stmt = $this->db->prepare($sql);
             $stmt->execute($params);
 
@@ -128,32 +162,54 @@ if (!class_exists('PromocionService')) {
         }
 
         public function eliminar(int $id): void
-        {
-            $this->obtener($id);
-            $stmt = $this->db->prepare("UPDATE promociones SET activo = 0 WHERE id = :id");
-            $stmt->execute(['id' => $id]);
-        }
+{
+    $this->obtener($id);
 
-        /**
-         * Obtiene las promociones vigentes que aplican a un producto específico.
-         * Útil para el POS.
-         */
+    $nid = $this->nid();
+
+    $sql = "DELETE FROM promociones WHERE id = :id";
+    $params = ['id' => $id];
+
+    if ($nid !== null) {
+        $sql .= " AND negocio_id = :nid";
+        $params['nid'] = $nid;
+    }
+
+    $stmt = $this->db->prepare($sql);
+    $stmt->execute($params);
+}
+
         public function vigentesParaProducto(int $productoId, int $categoriaId = 0): array
-        {
-            $stmt = $this->db->prepare(
-                "SELECT * FROM promociones
-                 WHERE activo = 1
-                   AND NOW() BETWEEN fecha_inicio AND fecha_fin
-                   AND (
-                     (aplica_a = 'global')
-                     OR (aplica_a = 'producto' AND producto_id = :pid)
-                     OR (aplica_a = 'categoria' AND categoria_id = :cid)
-                   )
-                 ORDER BY id ASC"
-            );
-            $stmt->execute(['pid' => $productoId, 'cid' => $categoriaId]);
-            return $stmt->fetchAll() ?: [];
-        }
+{
+    $nid = $this->nid();
+
+    // Solo incluimos la rama de categoría si realmente hay categoría
+    $sql = "SELECT * FROM promociones
+            WHERE activo = 1
+              AND NOW() BETWEEN fecha_inicio AND fecha_fin
+              AND (
+                aplica_a = 'global'
+                OR (aplica_a = 'producto' AND producto_id = :pid)";
+
+    $params = ['pid' => $productoId];
+
+    if ($categoriaId > 0) {
+        $sql .= " OR (aplica_a = 'categoria' AND categoria_id = :cid)";
+        $params['cid'] = $categoriaId;
+    }
+
+    $sql .= ")";
+
+    if ($nid !== null) {
+        $sql .= " AND negocio_id = :nid";
+        $params['nid'] = $nid;
+    }
+    $sql .= " ORDER BY id ASC";
+
+    $stmt = $this->db->prepare($sql);
+    $stmt->execute($params);
+    return $stmt->fetchAll() ?: [];
+}
 
         private function validar(array $data): void
         {

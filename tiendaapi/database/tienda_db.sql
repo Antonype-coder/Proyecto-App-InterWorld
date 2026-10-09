@@ -1,6 +1,5 @@
 -- ============================================================
--- TiendaAdmin v2.0 — Base de datos completa
--- Ejecutar en phpMyAdmin (pestaña SQL) sin seleccionar DB
+-- TiendaAdmin v2.0 — Base de datos completa (multi-tenant)
 -- ============================================================
 
 DROP DATABASE IF EXISTS tienda_db;
@@ -13,7 +12,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 SET NAMES utf8mb4;
 
 -- ============================================================
--- 1. NEGOCIOS (multi-tenant raíz)
+-- 1. NEGOCIOS
 -- ============================================================
 CREATE TABLE negocios (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -35,7 +34,7 @@ CREATE TABLE negocios (
 -- ============================================================
 CREATE TABLE usuarios (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    negocio_id INT UNSIGNED NOT NULL DEFAULT 1,
+    negocio_id INT UNSIGNED NOT NULL,
     nombre VARCHAR(120) NOT NULL,
     email VARCHAR(150) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
@@ -59,7 +58,7 @@ CREATE TABLE usuarios (
 -- ============================================================
 CREATE TABLE categorias (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    negocio_id INT UNSIGNED NOT NULL DEFAULT 1,
+    negocio_id INT UNSIGNED NOT NULL,
     nombre VARCHAR(100) NOT NULL,
     descripcion VARCHAR(255) NULL,
     activo TINYINT(1) NOT NULL DEFAULT 1,
@@ -77,7 +76,7 @@ CREATE TABLE categorias (
 -- ============================================================
 CREATE TABLE proveedores (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    negocio_id INT UNSIGNED NOT NULL DEFAULT 1,
+    negocio_id INT UNSIGNED NOT NULL,
     nombre VARCHAR(150) NOT NULL,
     contacto VARCHAR(120) NULL,
     telefono VARCHAR(30) NULL,
@@ -99,7 +98,7 @@ CREATE TABLE proveedores (
 -- ============================================================
 CREATE TABLE productos (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    negocio_id INT UNSIGNED NOT NULL DEFAULT 1,
+    negocio_id INT UNSIGNED NOT NULL,
     codigo_barras VARCHAR(64) NOT NULL,
     nombre VARCHAR(150) NOT NULL,
     descripcion TEXT NULL,
@@ -147,7 +146,7 @@ CREATE TABLE producto_imagenes (
 -- ============================================================
 CREATE TABLE clientes (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    negocio_id INT UNSIGNED NOT NULL DEFAULT 1,
+    negocio_id INT UNSIGNED NOT NULL,
     nombre VARCHAR(150) NOT NULL,
     documento VARCHAR(30) NULL,
     telefono VARCHAR(30) NULL,
@@ -176,7 +175,7 @@ CREATE TABLE clientes (
 -- ============================================================
 CREATE TABLE caja_sesiones (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    negocio_id INT UNSIGNED NOT NULL DEFAULT 1,
+    negocio_id INT UNSIGNED NOT NULL,
     usuario_id INT UNSIGNED NOT NULL,
     monto_apertura DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     monto_cierre_declarado DECIMAL(12,2) NULL,
@@ -208,7 +207,7 @@ CREATE TABLE caja_sesiones (
 -- ============================================================
 CREATE TABLE ventas (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    negocio_id INT UNSIGNED NOT NULL DEFAULT 1,
+    negocio_id INT UNSIGNED NOT NULL,
     numero VARCHAR(30) NOT NULL,
     idempotency_key VARCHAR(64) NULL,
     usuario_id INT UNSIGNED NOT NULL,
@@ -226,7 +225,7 @@ CREATE TABLE ventas (
     notas VARCHAR(255) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_ventas_numero (numero),
+    UNIQUE KEY uq_ventas_numero_negocio (negocio_id, numero),
     UNIQUE KEY uq_ventas_idempotency_key (idempotency_key),
     KEY idx_ventas_negocio (negocio_id),
     KEY idx_ventas_fecha (created_at),
@@ -270,7 +269,7 @@ CREATE TABLE venta_detalle (
 -- ============================================================
 CREATE TABLE movimientos_inventario (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    negocio_id INT UNSIGNED NOT NULL DEFAULT 1,
+    negocio_id INT UNSIGNED NOT NULL,
     producto_id INT UNSIGNED NOT NULL,
     usuario_id INT UNSIGNED NOT NULL,
     tipo ENUM('entrada','salida','ajuste') NOT NULL,
@@ -300,7 +299,7 @@ CREATE TABLE movimientos_inventario (
 -- ============================================================
 CREATE TABLE pagos_credito (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    negocio_id INT UNSIGNED NOT NULL DEFAULT 1,
+    negocio_id INT UNSIGNED NOT NULL,
     cliente_id INT UNSIGNED NOT NULL,
     venta_id INT UNSIGNED NULL,
     usuario_id INT UNSIGNED NOT NULL,
@@ -331,6 +330,7 @@ CREATE TABLE pagos_credito (
 -- ============================================================
 CREATE TABLE caja_movimientos (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    negocio_id INT UNSIGNED NOT NULL,
     caja_sesion_id INT UNSIGNED NOT NULL,
     usuario_id INT UNSIGNED NOT NULL,
     tipo ENUM('ingreso','egreso','venta','devolucion','ajuste') NOT NULL,
@@ -341,9 +341,12 @@ CREATE TABLE caja_movimientos (
     descripcion VARCHAR(255) NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
+    KEY idx_cajamov_negocio (negocio_id),
     KEY idx_cajamov_sesion (caja_sesion_id),
     KEY idx_cajamov_tipo (tipo),
     KEY idx_cajamov_fecha (created_at),
+    CONSTRAINT fk_cajamov_negocio FOREIGN KEY (negocio_id)
+        REFERENCES negocios(id) ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT fk_cajamov_sesion FOREIGN KEY (caja_sesion_id)
         REFERENCES caja_sesiones(id) ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT fk_cajamov_usuario FOREIGN KEY (usuario_id)
@@ -355,7 +358,7 @@ CREATE TABLE caja_movimientos (
 -- ============================================================
 CREATE TABLE notificaciones (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    negocio_id INT UNSIGNED NOT NULL DEFAULT 1,
+    negocio_id INT UNSIGNED NOT NULL,
     usuario_id INT UNSIGNED NULL,
     tipo VARCHAR(50) NOT NULL,
     titulo VARCHAR(150) NOT NULL,
@@ -383,7 +386,7 @@ CREATE TABLE notificaciones (
 -- ============================================================
 CREATE TABLE auditoria_logs (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-    negocio_id INT UNSIGNED NOT NULL DEFAULT 1,
+    negocio_id INT UNSIGNED NOT NULL,
     usuario_id INT UNSIGNED NULL,
     accion VARCHAR(100) NOT NULL,
     entidad VARCHAR(50) NOT NULL,
@@ -407,17 +410,23 @@ CREATE TABLE auditoria_logs (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
--- 15. CONFIGURACION
+-- 15. CONFIGURACION (AHORA POR NEGOCIO)
 -- ============================================================
 CREATE TABLE configuracion (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    negocio_id INT UNSIGNED NOT NULL,
     clave VARCHAR(80) NOT NULL,
     valor TEXT NULL,
     tipo ENUM('string','integer','decimal','boolean','json') NOT NULL DEFAULT 'string',
     grupo VARCHAR(50) NOT NULL DEFAULT 'general',
     descripcion VARCHAR(255) NULL,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    PRIMARY KEY (clave),
-    KEY idx_config_grupo (grupo)
+    PRIMARY KEY (id),
+    UNIQUE KEY uq_config_negocio_clave (negocio_id, clave),
+    KEY idx_config_negocio (negocio_id),
+    KEY idx_config_grupo (grupo),
+    CONSTRAINT fk_config_negocio FOREIGN KEY (negocio_id)
+        REFERENCES negocios(id) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
@@ -425,7 +434,7 @@ CREATE TABLE configuracion (
 -- ============================================================
 CREATE TABLE devoluciones (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    negocio_id INT UNSIGNED NOT NULL DEFAULT 1,
+    negocio_id INT UNSIGNED NOT NULL,
     numero VARCHAR(30) NOT NULL,
     venta_id INT UNSIGNED NOT NULL,
     usuario_id INT UNSIGNED NOT NULL,
@@ -437,7 +446,7 @@ CREATE TABLE devoluciones (
     estado ENUM('completada','anulada') NOT NULL DEFAULT 'completada',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_devoluciones_numero (numero),
+    UNIQUE KEY uq_dev_numero_negocio (negocio_id, numero),
     KEY idx_dev_negocio (negocio_id),
     KEY idx_dev_venta (venta_id),
     KEY idx_dev_cliente (cliente_id),
@@ -452,9 +461,6 @@ CREATE TABLE devoluciones (
         REFERENCES usuarios(id) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ============================================================
--- 17. DEVOLUCION_DETALLE
--- ============================================================
 CREATE TABLE devolucion_detalle (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     devolucion_id INT UNSIGNED NOT NULL,
@@ -472,11 +478,11 @@ CREATE TABLE devolucion_detalle (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
--- 18. PROMOCIONES
+-- 17. PROMOCIONES
 -- ============================================================
 CREATE TABLE promociones (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    negocio_id INT UNSIGNED NOT NULL DEFAULT 1,
+    negocio_id INT UNSIGNED NOT NULL,
     nombre VARCHAR(150) NOT NULL,
     descripcion VARCHAR(255) NULL,
     tipo ENUM('porcentaje','monto_fijo','precio_especial','2x1','3x2') NOT NULL,
@@ -505,11 +511,11 @@ CREATE TABLE promociones (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
--- 19. ORDENES_COMPRA
+-- 18. ORDENES_COMPRA
 -- ============================================================
 CREATE TABLE ordenes_compra (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    negocio_id INT UNSIGNED NOT NULL DEFAULT 1,
+    negocio_id INT UNSIGNED NOT NULL,
     numero VARCHAR(30) NOT NULL,
     proveedor_id INT UNSIGNED NOT NULL,
     usuario_id INT UNSIGNED NOT NULL,
@@ -523,7 +529,7 @@ CREATE TABLE ordenes_compra (
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    UNIQUE KEY uq_oc_numero (numero),
+    UNIQUE KEY uq_oc_numero_negocio (negocio_id, numero),
     KEY idx_oc_negocio (negocio_id),
     KEY idx_oc_proveedor (proveedor_id),
     KEY idx_oc_estado (estado),
@@ -536,9 +542,6 @@ CREATE TABLE ordenes_compra (
         REFERENCES usuarios(id) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- ============================================================
--- 20. ORDEN_COMPRA_DETALLE
--- ============================================================
 CREATE TABLE orden_compra_detalle (
     id INT UNSIGNED NOT NULL AUTO_INCREMENT,
     orden_compra_id INT UNSIGNED NOT NULL,
@@ -557,7 +560,7 @@ CREATE TABLE orden_compra_detalle (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================
--- 21. PUNTOS_HISTORIAL (lealtad)
+-- 19. PUNTOS_HISTORIAL
 -- ============================================================
 CREATE TABLE puntos_historial (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -584,61 +587,5 @@ CREATE TABLE puntos_historial (
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ============================================================
--- DATOS SEMILLA
+-- SIN DATOS SEMILLA. Cada cuenta nueva crea su propio negocio.
 -- ============================================================
-
--- Negocio demo
-INSERT INTO negocios (id, nombre, nit, telefono, email, direccion, plan, activo)
-VALUES (1, 'Tienda Demo', 'DEMO-001', '3001234567', 'demo@tienda.com', 'Calle Demo #123', 'pro', 1);
-
--- Usuarios demo (hashes temporales, se regeneran con hash-passwords.php)
-INSERT INTO usuarios (negocio_id, nombre, email, password_hash, rol, activo) VALUES
-(1, 'Administrador', 'admin@tienda.com', '$2y$10$placeholder', 'admin', 1),
-(1, 'Vendedor Demo', 'vendedor@tienda.com', '$2y$10$placeholder', 'vendedor', 1);
-
--- Categorías
-INSERT INTO categorias (negocio_id, nombre, descripcion) VALUES
-(1, 'Bebidas', 'Refrescos, jugos y aguas'),
-(1, 'Abarrotes', 'Productos de despensa'),
-(1, 'Limpieza', 'Productos de aseo y limpieza'),
-(1, 'Snacks', 'Papas, galletas y dulces'),
-(1, 'Lácteos', 'Leche, quesos y yogures');
-
--- Proveedores
-INSERT INTO proveedores (negocio_id, nombre, contacto, telefono, email, direccion) VALUES
-(1, 'Distribuidora El Sol', 'Carlos Pérez', '3001234567', 'contacto@elsol.com', 'Calle 10 #5-30'),
-(1, 'Comercial Andina', 'María Gómez', '3109876543', 'ventas@andina.com', 'Carrera 7 #45-12'),
-(1, 'Alimentos del Valle', 'Juan Rodríguez', '3205551234', 'info@delvalle.com', 'Av. Principal #100-20');
-
--- Productos
-INSERT INTO productos (negocio_id, codigo_barras, nombre, descripcion, categoria_id, proveedor_id, precio_compra, precio_venta, stock, stock_minimo, activo) VALUES
-(1, '7501234567890', 'Coca-Cola 400ml', 'Gaseosa personal', 1, 1, 1800.00, 3000.00, 50, 10, 1),
-(1, '7509876543210', 'Agua Cristal 600ml', 'Agua embotellada', 1, 1, 800.00, 1500.00, 80, 15, 1),
-(1, '7701234567890', 'Arroz Diana 500g', 'Arroz blanco', 2, 2, 1500.00, 2500.00, 40, 8, 1),
-(1, '7702345678901', 'Aceite Girasol 1L', 'Aceite vegetal', 2, 2, 5000.00, 7500.00, 25, 5, 1),
-(1, '7801234567890', 'Jabón Rey x3', 'Jabón en barra', 3, 1, 2000.00, 3500.00, 60, 10, 1),
-(1, '7809876543210', 'Detergente Fab 1kg', 'Detergente en polvo', 3, 3, 6000.00, 9000.00, 30, 6, 1),
-(1, '7901234567890', 'Papas Margarita', 'Snack de papa', 4, 3, 1200.00, 2000.00, 70, 15, 1),
-(1, '7909876543210', 'Leche Alqueria 1L', 'Leche entera', 5, 1, 2800.00, 4200.00, 45, 10, 1);
-
--- Configuración
-INSERT INTO configuracion (clave, valor, tipo, grupo, descripcion) VALUES
-('negocio_nombre', 'Mi Tienda', 'string', 'negocio', 'Nombre del negocio'),
-('negocio_nit', '', 'string', 'negocio', 'NIT o identificación fiscal'),
-('negocio_direccion', '', 'string', 'negocio', 'Dirección del negocio'),
-('negocio_telefono', '', 'string', 'negocio', 'Teléfono del negocio'),
-('negocio_email', '', 'string', 'negocio', 'Correo del negocio'),
-('moneda_simbolo', '$', 'string', 'moneda', 'Símbolo de la moneda'),
-('moneda_codigo', 'COP', 'string', 'moneda', 'Código ISO de la moneda'),
-('impuesto_porcentaje', '0', 'decimal', 'impuestos', 'Porcentaje de impuesto general'),
-('impuesto_incluido', '1', 'boolean', 'impuestos', 'El precio ya incluye impuesto'),
-('folio_prefijo_venta', 'V', 'string', 'folios', 'Prefijo del folio de ventas'),
-('folio_prefijo_devolucion', 'D', 'string', 'folios', 'Prefijo del folio de devoluciones'),
-('folio_prefijo_orden_compra', 'OC', 'string', 'folios', 'Prefijo de órdenes de compra'),
-('stock_alerta_habilitada', '1', 'boolean', 'notificaciones', 'Enviar alertas de stock bajo'),
-('notif_stock_bajo', '1', 'boolean', 'notificaciones', 'Alertas de stock bajo'),
-('notif_ventas_dia', '1', 'boolean', 'notificaciones', 'Resumen de ventas del día'),
-('notif_deudas_vencidas', '1', 'boolean', 'notificaciones', 'Alertas de deudas vencidas'),
-('tema_modo', 'light', 'string', 'apariencia', 'Modo de tema'),
-('tema_color_primario', '#111827', 'string', 'apariencia', 'Color primario'),
-('caja_monto_apertura_defecto', '0', 'decimal', 'caja', 'Monto de apertura por defecto');

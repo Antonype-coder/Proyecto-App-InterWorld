@@ -13,6 +13,7 @@ export { default as VentaResumenCard } from './VentaResumenCard';
 export { default as ClientePicker } from './ClientePicker';
 export { default as ProductoPicker } from './ProductoPicker';
 export { default as ProductoImageCarousel } from './ProductoImageCarousel';
+export { default as OnboardingBanner } from './OnboardingBanner';
 
 // Pendientes (no existen todavía)
 // export { default as DevolucionItem } from './DevolucionItem';

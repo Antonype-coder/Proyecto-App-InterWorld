@@ -1,9 +1,17 @@
 import { http } from './client';
-import type { LoginRequest, LoginResponse, Usuario } from '@tipos/index';
+import type {
+  LoginRequest,
+  LoginResponse,
+  RegisterNegocioRequest,
+  Usuario,
+} from '@tipos/index';
 
 export const authApi = {
   login: (data: LoginRequest): Promise<LoginResponse> =>
     http.post<LoginResponse>('/auth/login', data),
+
+  registrarNegocio: (data: RegisterNegocioRequest): Promise<LoginResponse> =>
+    http.post<LoginResponse>('/auth/registrar-negocio', data),
 
   logout: (): Promise<null> => http.post<null>('/auth/logout'),
 

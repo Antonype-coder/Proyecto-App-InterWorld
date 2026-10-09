@@ -30,3 +30,5 @@ export { devolucionesApi } from './devoluciones.api';
 export { promocionesApi } from './promociones.api';
 export { ordenesCompraApi } from './ordenes-compra.api';
 export { lealtadApi } from './lealtad.api';
+export * from './productos.api';
+export type { ProductoEstadisticas } from './productos.api';

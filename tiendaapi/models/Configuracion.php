@@ -7,40 +7,87 @@ if (!class_exists('Configuracion')) {
     class Configuracion extends BaseModel
     {
         protected string $table = 'configuracion';
-        protected string $primaryKey = 'clave';
-        protected array $fillable = ['clave', 'valor', 'tipo', 'grupo', 'descripcion'];
+        protected string $primaryKey = 'id';
+        protected array $fillable = ['negocio_id', 'clave', 'valor', 'tipo', 'grupo', 'descripcion'];
+        protected bool $tenantScoped = true;
 
-        public function get(string $clave, mixed $default = null): mixed
+        /** Devuelve todas las claves agrupadas por grupo. */
+        public function allByGroup(): array
         {
-            $row = $this->rawFirst("SELECT valor, tipo FROM {$this->table} WHERE clave = :c", ['c' => $clave]);
+            $nid = $this->negocioId();
+            if ($nid === null) return [];
+
+            $rows = $this->raw(
+                "SELECT clave, valor, tipo, grupo FROM {$this->table}
+                 WHERE negocio_id = :nid",
+                ['nid' => $nid]
+            );
+
+            $out = [];
+            foreach ($rows as $r) {
+                $grupo = $r['grupo'] ?: 'general';
+                $out[$grupo] = $out[$grupo] ?? [];
+                $out[$grupo][$r['clave']] = $this->cast($r['valor'], $r['tipo']);
+            }
+            return $out;
+        }
+
+        /** Alias para mantener compatibilidad. */
+        public function todas(): array
+        {
+            return $this->allByGroup();
+        }
+
+        /** Obtiene un valor puntual. */
+        public function obtener(string $clave, mixed $default = null): mixed
+        {
+            $nid = $this->negocioId();
+            if ($nid === null) return $default;
+
+            $row = $this->rawFirst(
+                "SELECT valor, tipo FROM {$this->table}
+                 WHERE negocio_id = :nid AND clave = :c LIMIT 1",
+                ['nid' => $nid, 'c' => $clave]
+            );
             if ($row === null) return $default;
 
             return $this->cast($row['valor'], $row['tipo']);
         }
 
-        public function set(string $clave, mixed $valor, string $grupo = 'general'): bool
+        /** Guarda o actualiza una clave. */
+        public function set(string $clave, mixed $valor, string $tipo = 'string', string $grupo = 'general'): bool
         {
+            $nid = $this->negocioId();
+            if ($nid === null) return false;
+
             $stmt = $this->db->prepare(
-                "INSERT INTO {$this->table} (clave, valor, grupo) VALUES (:c, :v_insert, :grupo)
-                 ON DUPLICATE KEY UPDATE valor = :v_update"
+                "INSERT INTO {$this->table} (negocio_id, clave, valor, tipo, grupo)
+                 VALUES (:nid, :c, :v, :t, :g)
+                 ON DUPLICATE KEY UPDATE
+                    valor = VALUES(valor),
+                    tipo  = VALUES(tipo),
+                    grupo = VALUES(grupo)"
             );
-            $stringValue = (string) $valor;
+
             return $stmt->execute([
-                'c' => $clave,
-                'v_insert' => $stringValue,
-                'grupo' => $grupo,
-                'v_update' => $stringValue,
+                'nid' => $nid,
+                'c'   => $clave,
+                'v'   => is_array($valor) ? json_encode($valor) : (string) $valor,
+                't'   => $tipo,
+                'g'   => $grupo,
             ]);
         }
 
-        public function allByGroup(): array
+        /** Guarda varios valores a la vez. */
+        public function setMultiple(array $valores, string $grupo = 'general'): void
         {
-            $rows = $this->raw("SELECT * FROM {$this->table} ORDER BY grupo ASC, clave ASC");
-            $out = [];
-            foreach ($rows as $r) {
-                $out[$r['grupo']][$r['clave']] = $this->cast($r['valor'], $r['tipo']);
+            foreach ($valores as $clave => $valor) {
+                $tipo = is_bool($valor) ? 'boolean'
+                      : (is_int($valor) ? 'integer'
+                      : (is_float($valor) ? 'decimal'
+                      : (is_array($valor) ? 'json' : 'string')));
+                $this->set($clave, $valor, $tipo, $grupo);
             }
-            return $out;
         }
 
         private function cast(mixed $valor, string $tipo): mixed
@@ -48,7 +95,7 @@ if (!class_exists('Configuracion')) {
             return match ($tipo) {
                 'integer' => (int) $valor,
                 'decimal' => (float) $valor,
-                'boolean' => in_array(strtolower((string) $valor), ['1', 'true', 'yes', 'on'], true),
+                'boolean' => in_array((string) $valor, ['1', 'true', 'yes'], true),
                 'json'    => json_decode((string) $valor, true),
                 default   => $valor,
             };

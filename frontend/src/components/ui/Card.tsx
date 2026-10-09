@@ -1,5 +1,12 @@
 import React from 'react';
-import { View, StyleSheet, ViewStyle, Pressable, Animated } from 'react-native';
+import {
+  View,
+  StyleSheet,
+  StyleProp,
+  ViewStyle,
+  Pressable,
+  Animated,
+} from 'react-native';
 import { radius, spacing, shadows } from '@theme/index';
 import { useColors } from '@hooks/useColors';
 import { usePressAnimation } from '@hooks/usePressAnimation';
@@ -10,7 +17,7 @@ interface CardProps {
   variant?: 'default' | 'flat' | 'elevated' | 'ghost';
   padding?: number;
   onPress?: () => void;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
 }
 

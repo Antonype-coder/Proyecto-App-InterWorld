@@ -13,6 +13,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as Haptics from 'expo-haptics';
+import { useNavigation } from '@react-navigation/native';
 
 import { radius, spacing, typography } from '@theme/index';
 import { useColors } from '@hooks/useColors';
@@ -25,6 +26,7 @@ import type { ToastVariant } from '@tipos/index';
 
 export default function LoginScreen(): React.ReactElement {
   const colors = useColors();
+  const navigation = useNavigation<any>();
   const login = useAuthStore((s) => s.login);
   const loading = useAuthStore((s) => s.loading);
 
@@ -37,7 +39,6 @@ export default function LoginScreen(): React.ReactElement {
   const {
     control,
     handleSubmit,
-    setValue,
     formState: { errors },
   } = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema) as never,
@@ -54,16 +55,6 @@ export default function LoginScreen(): React.ReactElement {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const msg = e instanceof Error ? e.message : 'Error al iniciar sesión';
       setToast({ visible: true, message: msg, variant: 'error' });
-    }
-  };
-
-  const rellenarDemo = (rol: 'admin' | 'vendedor'): void => {
-    if (rol === 'admin') {
-      setValue('email', 'admin@tienda.com');
-      setValue('password', 'admin123');
-    } else {
-      setValue('email', 'vendedor@tienda.com');
-      setValue('password', 'vendedor123');
     }
   };
 
@@ -169,39 +160,25 @@ export default function LoginScreen(): React.ReactElement {
               />
             </View>
 
-            <View style={styles.demoSection}>
-              <View style={styles.demoHeader}>
-                <View
-                  style={[
-                    styles.demoLine,
-                    { backgroundColor: colors.border },
-                  ]}
-                />
+            <View style={styles.registerSection}>
+              <Text
+                style={[styles.registerText, { color: colors.textSecondary }]}
+              >
+                ¿No tienes cuenta?
+              </Text>
+              <Pressable
+                onPress={() => navigation.navigate('Register')}
+                style={({ pressed }) => [
+                  styles.registerButton,
+                  pressed ? { opacity: 0.7 } : null,
+                ]}
+              >
                 <Text
-                  style={[styles.demoLabel, { color: colors.textMuted }]}
+                  style={[styles.registerLink, { color: colors.primary }]}
                 >
-                  CUENTAS DE PRUEBA
+                  Crear mi tienda
                 </Text>
-                <View
-                  style={[
-                    styles.demoLine,
-                    { backgroundColor: colors.border },
-                  ]}
-                />
-              </View>
-
-              <View style={styles.demoRow}>
-                <DemoButton
-                  icon="shield-account-outline"
-                  label="Admin"
-                  onPress={() => rellenarDemo('admin')}
-                />
-                <DemoButton
-                  icon="account-outline"
-                  label="Vendedor"
-                  onPress={() => rellenarDemo('vendedor')}
-                />
-              </View>
+              </Pressable>
             </View>
           </View>
 
@@ -218,37 +195,6 @@ export default function LoginScreen(): React.ReactElement {
         onHide={() => setToast((t) => ({ ...t, visible: false }))}
       />
     </SafeAreaView>
-  );
-}
-
-function DemoButton(props: {
-  icon: keyof typeof MaterialCommunityIcons.glyphMap;
-  label: string;
-  onPress: () => void;
-}): React.ReactElement {
-  const colors = useColors();
-
-  return (
-    <Pressable
-      onPress={props.onPress}
-      style={({ pressed }) => [
-        styles.demoButton,
-        {
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
-        },
-        pressed ? { backgroundColor: colors.surfacePressed } : null,
-      ]}
-    >
-      <MaterialCommunityIcons
-        name={props.icon}
-        size={16}
-        color={colors.textSecondary}
-      />
-      <Text style={[styles.demoButtonText, { color: colors.textPrimary }]}>
-        {props.label}
-      </Text>
-    </Pressable>
   );
 }
 
@@ -290,36 +236,20 @@ const styles = StyleSheet.create({
   },
   form: { marginBottom: spacing.xl },
 
-  demoSection: { marginTop: spacing.lg },
-  demoHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: spacing.md,
-  },
-  demoLine: {
-    flex: 1,
-    height: 1,
-  },
-  demoLabel: {
-    ...typography.overline,
-    marginHorizontal: spacing.md,
-  },
-  demoRow: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  demoButton: {
-    flex: 1,
+  registerSection: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: spacing.md,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    gap: spacing.sm,
+    gap: spacing.xs,
+    marginTop: spacing.lg,
   },
-  demoButtonText: {
-    ...typography.buttonSmall,
+  registerText: { ...typography.caption },
+  registerButton: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.xs,
+  },
+  registerLink: {
+    ...typography.bodyBold,
   },
 
   footer: {

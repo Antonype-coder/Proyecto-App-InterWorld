@@ -5,8 +5,9 @@ import { authApi, setUnauthorizedHandler } from '@api/index';
 import {
   STORAGE_TOKEN_KEY,
   STORAGE_USER_KEY,
+  STORAGE_ONBOARDING_KEY,
 } from '@utils/constants';
-import type { Usuario } from '@tipos/index';
+import type { RegisterNegocioRequest, Usuario } from '@tipos/index';
 
 interface AuthState {
   user: Usuario | null;
@@ -16,6 +17,7 @@ interface AuthState {
   error: string | null;
 
   login: (email: string, password: string) => Promise<void>;
+  registrarNegocio: (data: RegisterNegocioRequest) => Promise<void>;
   logout: () => Promise<void>;
   loadFromStorage: () => Promise<void>;
   isAdmin: () => boolean;
@@ -60,13 +62,49 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
+  registrarNegocio: async (data) => {
+    set({ loading: true, error: null });
+    try {
+      const res = await authApi.registrarNegocio(data);
+
+      await AsyncStorage.multiSet([
+        [STORAGE_TOKEN_KEY, res.token],
+        [STORAGE_USER_KEY, JSON.stringify(res.user)],
+        [STORAGE_ONBOARDING_KEY, '1'],
+      ]);
+
+      let usuarioCompleto: Usuario;
+      try {
+        usuarioCompleto = await authApi.me();
+      } catch {
+        usuarioCompleto = { ...res.user, activo: 1 };
+      }
+
+      set({
+        user: usuarioCompleto,
+        token: res.token,
+        loading: false,
+        initialized: true,
+      });
+    } catch (e) {
+      const mensaje =
+        e instanceof Error ? e.message : 'Error al crear la cuenta';
+      set({ loading: false, error: mensaje });
+      throw e;
+    }
+  },
+
   logout: async () => {
     try {
       await authApi.logout();
     } catch {
       // Ignorar errores de red al cerrar sesión
     }
-    await AsyncStorage.multiRemove([STORAGE_TOKEN_KEY, STORAGE_USER_KEY]);
+    await AsyncStorage.multiRemove([
+      STORAGE_TOKEN_KEY,
+      STORAGE_USER_KEY,
+      STORAGE_ONBOARDING_KEY,
+    ]);
     set({ user: null, token: null, error: null });
   },
 
@@ -107,7 +145,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 }));
 
-// Registrar callback para cierre automático de sesión en 401
 setUnauthorizedHandler(() => {
   useAuthStore.setState({ user: null, token: null });
 });

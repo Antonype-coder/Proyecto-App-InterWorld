@@ -1,1314 +1,901 @@
-# TiendaAdmin
+::: {align="center"}
+# InterWorld
 
-Sistema de punto de venta, inventario y administración para tiendas pequeñas y medianas. Aplicación móvil con backend REST y arquitectura multi-negocio.
+**Gestión comercial, punto de venta e inventario en una sola
+plataforma.**
 
----
+Aplicación móvil multiplataforma con API REST y arquitectura
+multi-tenant para pequeños y medianos comercios.
 
-## Tabla de contenidos
+[![React
+Native](https://img.shields.io/badge/React_Native-0.86-61DAFB?style=flat-square&logo=react&logoColor=white)](https://reactnative.dev/)
+[![Expo](https://img.shields.io/badge/Expo-57-000020?style=flat-square&logo=expo&logoColor=white)](https://expo.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.3-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![PHP](https://img.shields.io/badge/PHP-8.1%2B-777BB4?style=flat-square&logo=php&logoColor=white)](https://www.php.net/)
+[![MySQL](https://img.shields.io/badge/MySQL-8-4479A1?style=flat-square&logo=mysql&logoColor=white)](https://www.mysql.com/)
+[![License:
+MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
+:::
 
-1. [Descripción general](#1-descripción-general)
-2. [Tecnologías](#2-tecnologías)
-3. [Estructura del repositorio](#3-estructura-del-repositorio)
-4. [Requisitos previos](#4-requisitos-previos)
-5. [Instalación del backend](#5-instalación-del-backend)
-6. [Instalación del frontend](#6-instalación-del-frontend)
-7. [Credenciales de prueba](#7-credenciales-de-prueba)
-8. [Uso de la aplicación](#8-uso-de-la-aplicación)
-9. [Cómo probar la aplicación](#9-cómo-probar-la-aplicación)
-10. [Endpoints del API](#10-endpoints-del-api)
-11. [Base de datos](#11-base-de-datos)
-12. [Scripts disponibles](#12-scripts-disponibles)
-13. [Solución de problemas](#13-solución-de-problemas)
-14. [Notas importantes de instalación](#14-notas-importantes-de-instalación)
-15. [Roadmap](#15-roadmap)
-16. [Licencia](#16-licencia)
+------------------------------------------------------------------------
 
----
+## Contenido
 
-## 1. Descripción general
+-   [Descripción](#descripción)
+-   [Funcionalidades](#funcionalidades)
+-   [Tecnologías](#tecnologías)
+-   [Arquitectura](#arquitectura)
+-   [Estructura del proyecto](#estructura-del-proyecto)
+-   [Requisitos](#requisitos)
+-   [Instalación](#instalación)
+-   [Configuración](#configuración)
+-   [Ejecución](#ejecución)
+-   [Pruebas](#pruebas)
+-   [API](#api)
+-   [Roles y permisos](#roles-y-permisos)
+-   [Solución de problemas](#solución-de-problemas)
+-   [Despliegue](#despliegue)
+-   [Convenciones de desarrollo](#convenciones-de-desarrollo)
+-   [Licencia](#licencia)
+-   [Autor y soporte](#autor-y-soporte)
 
-TiendaAdmin es una aplicación empresarial que permite:
+------------------------------------------------------------------------
 
-* Registrar ventas con escáner de códigos de barras.
-* Controlar inventario con trazabilidad completa.
-* Administrar clientes con crédito y programa de lealtad.
-* Manejar caja diaria con arqueo automático.
-* Generar reportes exportables a PDF y Excel.
-* Gestionar múltiples negocios con datos aislados (multi-tenant).
-* Funcionar con roles diferenciados (admin / vendedor).
+## Descripción
 
----
+**InterWorld** es una plataforma de gestión comercial que combina una
+aplicación móvil multiplataforma con un backend API REST. Permite
+administrar ventas, productos, inventario, clientes, promociones, caja y
+reportes desde una solución centralizada.
 
-## 2. Tecnologías
+Su arquitectura **multi-tenant** separa los datos de cada negocio para
+que la información comercial de una organización no sea accesible desde
+otra. La aplicación también contempla el registro de ventas sin conexión
+y su sincronización posterior.
 
-### Frontend
+## Funcionalidades
 
-* React Native 0.76 + Expo SDK 52.
-* TypeScript en modo estricto.
-* React Navigation 7 (stacks y tabs anidados).
-* Zustand para estado global.
-* Axios con interceptores JWT.
-* React Hook Form + Zod para formularios.
-* React Native Paper para componentes base.
-* React Native Gifted Charts para gráficos.
-* Expo Camera, Image Picker, Print, Sharing y File System.
+### Punto de venta
 
-### Backend
+-   Carrito de compra con control de inventario.
+-   Búsqueda por nombre y código de barras.
+-   Escaneo mediante la cámara del dispositivo.
+-   Descuentos manuales y promociones automáticas.
+-   Pagos en efectivo, tarjeta y transferencia.
+-   Ventas a crédito con validación de cupo.
+-   Registro offline con sincronización diferida.
 
-* PHP 8.1+ sin framework (arquitectura MVC propia).
-* MySQL 8 / MariaDB 10.4+ (InnoDB, utf8mb4).
-* Apache 2.4+ (XAMPP).
-* Composer para gestión de dependencias.
-* JWT propio (HMAC-SHA256).
-* Monolog para logging.
-* PHPMailer para emails.
-* Ramsey UUID para identificadores únicos.
-* Dotenv para variables de entorno.
+### Productos e inventario
 
----
+-   Gestión de productos y múltiples imágenes.
+-   Rotación de imágenes antes de guardar.
+-   Categorías y proveedores.
+-   Movimientos de inventario: entradas, salidas y ajustes.
+-   Alertas de stock bajo.
+-   Historial de rendimiento por producto.
 
-## 3. Estructura del repositorio
+### Promociones
 
-```text
-TiendaAdmin/
-├── frontend/
-│   ├── App.tsx
-│   ├── app.json
-│   ├── babel.config.js
-│   ├── tsconfig.json
-│   ├── package.json
-│   ├── .env
-│   ├── TESTING.md
-│   └── src/
-│       ├── api/                  # 15 archivos de clientes HTTP
-│       ├── components/
-│       │   ├── ui/               # 22 componentes base
-│       │   ├── layout/           # 4 layouts
-│       │   ├── feedback/         # 3 componentes
-│       │   ├── forms/            # 5 formularios
-│       │   ├── domain/            # 7 componentes de negocio
-│       │   └── charts/            # 3 gráficos
-│       ├── data/                  # FAQs y datos estáticos
-│       ├── hooks/                 # 6 hooks personalizados
-│       ├── navigation/            # 15 archivos de navegación
-│       ├── screens/               # 45+ pantallas
-│       ├── services/              # PDF, Excel, imágenes
-│       ├── store/                 # 8 stores Zustand
-│       ├── theme/                 # Sistema de diseño
-│       ├── types/                 # 20 archivos de tipos
-│       └── utils/                 # Utilidades
-│
-└── backend/
-    ├── index.php
-    ├── .htaccess
-    ├── composer.json
-    ├── .env
-    ├── config/
-    ├── core/
-    │   └── Exceptions/             # 7 excepciones tipadas
-    ├── middleware/                 # 5 middlewares
-    ├── controllers/                # 21 controladores
-    ├── services/                   # 10 servicios de negocio
-    ├── models/                     # 12 modelos
-    ├── utils/                      # JWT, Money, Folio, Upload, Helpers
-    ├── routes/                     # api.php con ~70 endpoints
-    ├── database/                   # Migraciones y seeds
-    ├── sql/                        # tienda_db.sql
-    ├── storage/                    # Logs, cache, uploads, exports
-    ├── scripts/                    # Scripts CLI
-    └── test_completo.php           # Test de 60 endpoints
+-   Descuentos por porcentaje o monto fijo.
+-   Precio especial, 2x1 y 3x2.
+-   Aplicación por producto, categoría o de forma global.
+-   Fechas de vigencia y cantidades mínimas configurables.
+-   Análisis de rentabilidad por promoción.
+
+### Clientes y crédito
+
+-   Información de contacto y ficha del cliente.
+-   Cupo de crédito y saldo pendiente.
+-   Estado de cuenta y pagos parciales.
+-   Programa de fidelización con puntos y niveles.
+
+### Caja
+
+-   Apertura con monto inicial.
+-   Registro de ingresos y egresos.
+-   Registro automático de ventas.
+-   Cierre con arqueo y cálculo de diferencias.
+-   Historial de turnos.
+
+### Reportes
+
+-   Indicadores clave de desempeño (KPI).
+-   Gráficos de ventas por día y hora.
+-   Ranking de productos y clientes.
+-   Distribución de ventas por método de pago.
+-   Exportación a PDF y Excel.
+
+### Seguridad
+
+-   Autenticación mediante JWT (HS256).
+-   Contraseñas protegidas con bcrypt.
+-   Roles de administrador y vendedor.
+-   Separación de datos por negocio.
+-   Auditoría de acciones críticas.
+-   Limitación de solicitudes en endpoints sensibles.
+
+## Tecnologías
+
+  -----------------------------------------------------------------------
+  Área                    Tecnología              Propósito
+  ----------------------- ----------------------- -----------------------
+  Aplicación móvil        React Native 0.86       Interfaz
+                                                  multiplataforma
+
+  Runtime y herramientas  Expo 57                 Desarrollo y ejecución
+                                                  móvil
+
+  Lenguaje frontend       TypeScript 5.3          Tipado estático
+
+  Estado global           Zustand                 Gestión del estado
+
+  Formularios             React Hook Form + Zod   Formularios y
+                                                  validación
+
+  Navegación              React Navigation 7      Navegación entre
+                                                  pantallas
+
+  Cliente HTTP            Axios                   Comunicación con la API
+
+  Imágenes                Expo Image Picker /     Selección y
+                          Image Manipulator       procesamiento
+
+  Gráficos                React Native Gifted     Visualización de datos
+                          Charts                  
+
+  Backend                 PHP 8.1+                API y lógica de negocio
+
+  Base de datos           MySQL 8                 Persistencia relacional
+
+  Acceso a datos          PDO                     Consultas a base de
+                                                  datos
+
+  Autenticación           JWT (HS256)             Autenticación sin
+                                                  estado
+
+  Logs                    Monolog                 Registro de eventos
+
+  Correo                  PHPMailer               Envío de correos
+
+  Dependencias PHP        Composer                Gestión de paquetes
+  -----------------------------------------------------------------------
+
+## Arquitectura
+
+``` text
+┌──────────────────────────────────────┐
+│       Aplicación móvil               │
+│  React Native · Expo · TypeScript    │
+└──────────────────┬───────────────────┘
+                   │ HTTPS / JSON
+                   │ Authorization: Bearer JWT
+┌──────────────────▼───────────────────┐
+│              API REST                │
+│       PHP · Router · Middleware      │
+│       Controllers · Services          │
+└──────────────────┬───────────────────┘
+                   │ PDO
+┌──────────────────▼───────────────────┐
+│           MySQL 8                     │
+│       Datos aislados por negocio      │
+└──────────────────────────────────────┘
 ```
 
----
+### Flujo de una petición
 
-## 4. Requisitos previos
+1.  La aplicación envía una petición HTTP con el token JWT en
+    `Authorization`.
+2.  El middleware de autenticación valida el token y obtiene el
+    identificador del negocio.
+3.  El controlador procesa la petición.
+4.  La capa de servicios ejecuta la lógica de negocio.
+5.  Los modelos aplican el filtro correspondiente por `negocio_id`.
+6.  La API devuelve una respuesta JSON estandarizada.
 
-### Software necesario
+## Estructura del proyecto
 
-* XAMPP con PHP 8.1+ y MySQL.
-* Composer.
-* Node.js 18 o superior.
-* Git (opcional).
-* Expo Go en el celular (Android o iOS).
-
-### Extensiones PHP requeridas
-
-Editar:
-
-```text
-C:\xampp\php\php.ini
+``` text
+Proyecto-App-InterWorld/
+├── backend/
+│   ├── config/
+│   ├── controllers/
+│   ├── core/
+│   │   ├── Exceptions/
+│   │   ├── Auth.php
+│   │   ├── Logger.php
+│   │   ├── Request.php
+│   │   ├── Response.php
+│   │   ├── Router.php
+│   │   └── Validator.php
+│   ├── database/
+│   │   ├── migrations/
+│   │   ├── seeds/
+│   │   └── tienda_db.sql
+│   ├── docs/
+│   │   └── API.md
+│   ├── middleware/
+│   ├── models/
+│   ├── routes/
+│   ├── services/
+│   ├── storage/
+│   │   ├── logs/
+│   │   ├── cache/
+│   │   └── uploads/
+│   ├── utils/
+│   ├── .env.example
+│   ├── composer.json
+│   ├── index.php
+│   └── test_e2e.php
+└── frontend/
+    ├── assets/
+    ├── src/
+    │   ├── api/
+    │   ├── components/
+    │   ├── data/
+    │   ├── hooks/
+    │   ├── i18n/
+    │   ├── navigation/
+    │   ├── screens/
+    │   ├── services/
+    │   ├── store/
+    │   ├── theme/
+    │   ├── types/
+    │   └── utils/
+    ├── __tests__/
+    ├── .env.example
+    ├── App.tsx
+    ├── app.json
+    ├── babel.config.js
+    ├── index.ts
+    ├── jest.config.js
+    ├── package.json
+    └── tsconfig.json
 ```
 
-Las siguientes extensiones deben estar habilitadas, es decir, sin `;` al inicio:
+> La estructura anterior resume los directorios y archivos principales
+> del proyecto.
 
-```ini
-extension=pdo_mysql
-extension=mbstring
-extension=json
-extension=openssl
-extension=fileinfo
-extension=gd
-extension=curl
-extension=zip
+## Requisitos
+
+Antes de instalar, asegúrate de contar con:
+
+  Herramienta   Versión
+  ------------- -------------------------------------------
+  Node.js       18.x o superior
+  npm           9.x o superior
+  Git           2.x o superior
+  PHP           8.1 o superior
+  MySQL         8
+  Composer      2.x
+  XAMPP         Con Apache, PHP y MySQL
+  Expo Go       Versión reciente, en el dispositivo móvil
+
+Verifica las instalaciones:
+
+``` bash
+node --version
+npm --version
+git --version
+php --version
+composer --version
 ```
 
-Reiniciar Apache después de cualquier cambio en este archivo.
+## Instalación
 
----
+### 1. Clonar el repositorio
 
-## 5. Instalación del backend
-
-### Paso 1: Copiar el proyecto
-
-Copiar la carpeta `backend/` dentro de:
-
-```text
-C:\xampp\htdocs\
+``` bash
+git clone https://github.com/tu-usuario/interworld.git
+cd interworld
 ```
 
-Renombrarla a:
+Reemplaza `tu-usuario` por el usuario u organización real de GitHub.
 
-```text
-interworld
+### 2. Preparar el backend
+
+Si utilizas XAMPP en Windows, copia el backend al directorio de Apache:
+
+``` powershell
+Copy-Item -Recurse -Path ".\backend" -Destination "C:\xampp\htdocs\tiendaapi"
 ```
 
-La ruta final debe ser:
+Instala las dependencias:
 
-```text
-C:\xampp\htdocs\interworld\
-```
-
-### Paso 2: Instalar dependencias
-
-Abrir PowerShell:
-
-```powershell
-cd C:\xampp\htdocs\interworld
+``` bash
+cd C:/xampp/htdocs/tiendaapi
 composer install
 ```
 
-Esto instala:
+Crea el archivo de entorno a partir de la plantilla:
 
-* vlucas/phpdotenv
-* monolog/monolog
-* ramsey/uuid
-* phpmailer/phpmailer
-
-### Paso 3: Configurar variables de entorno
-
-Copiar `.env.example` como `.env`:
-
-```powershell
+``` bash
 cp .env.example .env
 ```
 
-Editar el archivo `.env`:
+En Windows, también puedes copiar `.env.example` manualmente y nombrar
+la copia `.env`.
 
-```env
-APP_NAME=TiendaAdmin
-APP_ENV=local
+### 3. Crear e importar la base de datos
+
+1.  Abre el panel de XAMPP.
+2.  Inicia Apache y MySQL.
+3.  Entra en [phpMyAdmin](http://localhost/phpmyadmin).
+4.  Crea una base de datos llamada `tienda_db` con cotejamiento
+    `utf8mb4_unicode_ci`.
+5.  Selecciona la base de datos e importa
+    `backend/database/tienda_db.sql`.
+
+Si el proyecto dispone de un script de migraciones configurado, puedes
+usar el procedimiento definido por ese script. Verifica que la ruta
+exista antes de ejecutarlo.
+
+### 4. Comprobar el backend
+
+Con Apache y MySQL activos, abre:
+
+``` text
+http://localhost/tiendaapi/api/auth/me
+```
+
+Sin un token de autenticación, se espera una respuesta similar a:
+
+``` json
+{
+  "success": false,
+  "data": null,
+  "message": "Token de autenticación ausente."
+}
+```
+
+### 5. Instalar el frontend
+
+Desde la raíz del repositorio:
+
+``` bash
+cd frontend
+npm install
+```
+
+Si npm informa de conflictos de dependencias, prueba esta alternativa
+solo si es necesario:
+
+``` bash
+npm install --legacy-peer-deps
+```
+
+### 6. Configurar la conexión del frontend
+
+Copia la plantilla:
+
+``` bash
+cp .env.example .env
+```
+
+En Windows, consulta la dirección IPv4 local:
+
+``` powershell
+ipconfig
+```
+
+Edita `frontend/.env` y reemplaza la IP de ejemplo por la dirección de
+tu equipo.
+
+### 7. Configurar el firewall de Windows, si hace falta
+
+En PowerShell ejecutado como administrador:
+
+``` powershell
+New-NetFirewallRule `
+  -DisplayName "XAMPP HTTP" `
+  -Direction Inbound `
+  -Protocol TCP `
+  -LocalPort 80 `
+  -Action Allow
+```
+
+Abre únicamente los puertos necesarios para tu entorno y red.
+
+## Configuración
+
+### Backend: `backend/.env`
+
+Configura las variables de entorno según tu instalación:
+
+``` env
+APP_URL=http://localhost/tiendaapi
+APP_ENV=development
 APP_DEBUG=true
-APP_URL=http://localhost/interworld
-APP_TIMEZONE=America/Bogota
 
-DB_HOST=127.0.0.1
+DB_HOST=localhost
 DB_PORT=3306
 DB_NAME=tienda_db
 DB_USER=root
 DB_PASS=
+DB_CHARSET=utf8mb4
 
-JWT_SECRET=GENERAR_UNO_ALEATORIO
-JWT_EXP_MINUTES=480
+JWT_SECRET=REEMPLAZAR_POR_UN_SECRETO_ALEATORIO
+JWT_EXP_MINUTES=43200
+
+UPLOAD_MAX_SIZE=5242880
+UPLOAD_ALLOWED=image/jpeg,image/png,image/webp
 
 CORS_ALLOWED_ORIGINS=*
-RATE_LIMIT_LOGIN_MAX=10
-RATE_LIMIT_LOGIN_WINDOW=300
 ```
 
-### Generar `JWT_SECRET`
+Genera un secreto aleatorio para JWT:
 
-No utilizar literalmente:
-
-```env
-JWT_SECRET=GENERAR_UNO_ALEATORIO
+``` bash
+openssl rand -base64 64
 ```
 
-Generar un secreto aleatorio con PHP:
+Copia el resultado en `JWT_SECRET`. No compartas este valor ni lo subas
+al repositorio.
 
-```powershell
-php -r "echo base64_encode(random_bytes(48));"
-```
+**Antes de producción:** desactiva el modo debug, configura credenciales
+seguras y limita CORS a los orígenes autorizados. No uses
+`CORS_ALLOWED_ORIGINS=*` como configuración de producción.
 
-Copiar el resultado y colocarlo en:
+### Frontend: `frontend/.env`
 
-```env
-JWT_SECRET=PEGA_AQUI_EL_VALOR_GENERADO
-```
-
-Por ejemplo:
-
-```env
-JWT_SECRET=7fK2mQ9xV4nR8pL1zT6wY3cA0sD5hG8jN2bM7vX4qP9rC6tU1eW5kZ8fH3
-```
-
-> **Importante:** nunca publiques el `JWT_SECRET` real en GitHub ni lo compartas públicamente.
-
-Cada instalación debe utilizar un `JWT_SECRET` diferente.
-
-### Paso 4: Crear la base de datos
-
-Abrir:
-
-```text
-http://localhost/phpmyadmin
-```
-
-Ir a la pestaña **SQL**, sin seleccionar una base de datos, pegar el contenido de:
-
-```text
-sql/tienda_db.sql
-```
-
-y ejecutar.
-
-Esto crea:
-
-* Base de datos `tienda_db`.
-* 21 tablas.
-* Negocio demo.
-* 2 usuarios semilla.
-* Datos de ejemplo.
-
-### Paso 5: Generar hashes reales de contraseñas
-
-Ejecutar:
-
-```powershell
-php scripts/hash-passwords.php
-```
-
-Verificar que los dos usuarios muestren `OK`.
-
-Si falla, ejecutar:
-
-```powershell
-php scripts/fix-passwords.php
-```
-
-### Paso 6: Verificar el backend
-
-Abrir:
-
-```text
-http://localhost/interworld/api/health
-```
-
-Debe devolver:
-
-```json
-{
-  "success": true,
-  "data": {
-    "status": "ok",
-    "version": "2.0.0"
-  }
-}
-```
-
-### Paso 7: Ejecutar el test completo
-
-```powershell
-php test_completo.php
-```
-
-El resultado esperado es:
-
-```text
-Total:    60
-Pasaron:  60
-Fallaron: 0
-```
-
----
-
-## 6. Instalación del frontend
-
-### Paso 1: Instalar dependencias
-
-```powershell
-cd ruta\al\frontend
-npm install
-```
-
-### Paso 2: Obtener la IP local
-
-```powershell
-ipconfig | Select-String "IPv4"
-```
-
-Anotar la dirección IPv4, por ejemplo:
-
-```text
-192.168.1.100
-```
-
-### Paso 3: Configurar el archivo `.env`
-
-Copiar `.env.example` a `.env`:
-
-```powershell
-cp .env.example .env
-```
-
-Editar:
-
-```env
-EXPO_PUBLIC_API_URL=http://192.168.1.100/interworld/api
-EXPO_PUBLIC_APP_NAME=TiendaAdmin
+``` env
+EXPO_PUBLIC_API_URL=http://192.168.1.45/tiendaapi/api
+EXPO_PUBLIC_APP_NAME=InterWorld
 EXPO_PUBLIC_APP_VERSION=2.0.0
+EXPO_PUBLIC_MONEDA_DEFAULT=COP
+EXPO_PUBLIC_SIMBOLO_MONEDA_DEFAULT=$
 ```
 
-> **Importante:** utilizar la IP local de la PC y no `localhost`. El celular necesita acceder al backend a través de la red.
+Cambia `192.168.1.45` por la IP local de tu equipo. La URL debe ser
+accesible desde el dispositivo que ejecuta Expo Go.
 
-### Paso 4: Arrancar Expo
+Después de modificar variables de entorno, reinicia Expo limpiando la
+caché:
 
-```powershell
-npx expo start --clear
-```
-
-### Paso 5: Abrir en el celular
-
-1. Abrir Expo Go.
-2. Escanear el código QR mostrado en la terminal.
-3. Esperar a que compile.
-
-El celular y la PC deben estar conectados a la misma red WiFi.
-
----
-
-## 7. Credenciales de prueba
-
-| Rol           | Correo                | Contraseña    | Permisos           |
-| ------------- | --------------------- | ------------- | ------------------ |
-| Administrador | `admin@tienda.com`    | `admin123`    | Acceso total       |
-| Vendedor      | `vendedor@tienda.com` | `vendedor123` | Ventas y consultas |
-
-> Estas credenciales son únicamente para el entorno de prueba.
-
----
-
-## 8. Uso de la aplicación
-
-### Inicio de sesión
-
-Abrir la aplicación e ingresar las credenciales.
-
-También existe una opción para registrar un nuevo negocio, creando una cuenta aislada con sus propios datos.
-
-### Dashboard
-
-La pantalla principal incluye:
-
-* Selector de período: Hoy, Ayer, Semana, Mes y Año.
-* KPIs con comparación contra el período anterior.
-* Gráfico de línea con ventas por día.
-* Gráfico de barras con ventas por hora.
-* Gráfico circular con métodos de pago.
-* Top 5 de productos con barras de progreso.
-* Alertas de stock bajo.
-* Tarjeta de caja abierta.
-* Últimas ventas.
-
-### Punto de venta
-
-1. Abrir la pestaña **Vender**.
-2. Buscar un producto por nombre o código.
-3. Utilizar la cámara para escanear códigos de barras.
-4. Ajustar cantidades en el carrito.
-5. Aplicar un descuento si es necesario.
-6. Elegir el tipo de pago: contado o crédito.
-7. Si es crédito, seleccionar el cliente.
-8. Tocar **Cobrar**.
-
-### Productos
-
-* Lista con búsqueda y filtro por categoría.
-* Crear productos con fotografía desde cámara o galería.
-* Escanear códigos de barras.
-* Editar y desactivar productos (solo administrador).
-
-### Clientes
-
-* Lista con búsqueda.
-* Filtro para clientes con deuda.
-* Estado de cuenta con historial de ventas y pagos.
-* Registro de pagos.
-* Programa de lealtad.
-
-### Ventas
-
-* Lista con filtros por estado y tipo de pago.
-* Detalle de cada venta.
-* Anulación de ventas por administradores.
-* Reversión de stock y deuda al anular.
-* Devoluciones parciales o totales.
-
-### Devoluciones
-
-1. Abrir la venta original.
-2. Tocar **Devolver productos**.
-3. Seleccionar las cantidades.
-4. Escribir el motivo.
-5. Elegir el método:
-
-   * Efectivo.
-   * Transferencia.
-   * Nota de crédito.
-   * Reposición.
-6. Confirmar.
-
-### Promociones
-
-Cinco tipos disponibles:
-
-* Porcentaje de descuento.
-* Monto fijo.
-* Precio especial.
-* 2x1.
-* 3x2.
-
-Las promociones pueden aplicarse a:
-
-* Productos.
-* Categorías.
-* Globalmente.
-
-También pueden configurarse con fecha de inicio y fecha de finalización.
-
-### Órdenes de compra
-
-1. Crear una orden seleccionando un proveedor.
-2. Agregar productos con cantidad y precio.
-3. Definir la fecha esperada.
-4. Guardar como borrador.
-5. Marcar como enviada.
-6. Recibir la mercancía parcial o totalmente.
-
-### Caja
-
-1. Abrir caja con un monto inicial.
-2. Registrar ingresos o egresos manuales.
-3. Consultar los totales del turno en tiempo real.
-4. Cerrar caja con arqueo automático.
-5. Consultar la diferencia entre el valor declarado y el registrado por el sistema.
-
-### Reportes
-
-La aplicación dispone de tres reportes exportables:
-
-* Ventas.
-* Inventario valorizado.
-* Cartera de clientes.
-
-Cada reporte puede generarse en PDF y Excel e incluye el logo y los datos del negocio.
-
-### Búsqueda global
-
-Permite buscar simultáneamente en:
-
-* Productos.
-* Clientes.
-* Ventas.
-* Proveedores.
-
-Guarda el historial de las últimas 10 búsquedas.
-
-### Programa de lealtad
-
-* 1 punto por cada $1.000 en compras.
-* 1 punto equivale a $100 de descuento.
-* Niveles: Bronze, Silver y Gold.
-* Canje de puntos desde el estado de cuenta del cliente.
-* Ranking de clientes por puntos.
-
-### Centro de ayuda
-
-Incluye:
-
-* 23 preguntas frecuentes organizadas por categoría.
-* Búsqueda de preguntas.
-* Tooltips contextuales en pantallas clave.
-
----
-
-## 9. Cómo probar la aplicación
-
-### Prueba básica — 5 minutos
-
-1. Iniciar sesión con `admin@tienda.com` / `admin123`.
-2. Verificar el Dashboard y sus gráficos.
-3. Ir a **Vender**.
-4. Buscar `"coca"`.
-5. Agregar un producto al carrito.
-6. Realizar una venta.
-7. Ir a **Productos**.
-8. Abrir un producto y verificar su fotografía.
-9. Cerrar sesión.
-
-### Prueba completa — 30 minutos
-
-Seguir el archivo:
-
-```text
-frontend/TESTING.md
-```
-
-Este archivo contiene el checklist de las 45+ pantallas.
-
-### Prueba del backend — 5 minutos
-
-```powershell
-cd C:\xampp\htdocs\interworld
-php test_completo.php
-```
-
-Resultado esperado:
-
-```text
-Total:    60
-Pasaron:  60
-Fallaron: 0
-```
-
-### Prueba del registro de negocio
-
-1. En Login, tocar **Crear cuenta de negocio**.
-2. Ingresar los datos del negocio.
-3. Ingresar nombre, email y contraseña.
-4. Confirmar.
-5. Ingresar al dashboard vacío.
-6. Crear productos y clientes.
-7. Verificar que solo aparezcan en esta cuenta.
-8. Cerrar sesión.
-9. Ingresar con `admin@tienda.com`.
-10. Verificar que los datos sean diferentes.
-
-### Prueba del escáner
-
-1. Ir a **Vender**.
-2. Tocar el botón de cámara.
-3. Apuntar al código de barras de un producto existente.
-4. Verificar que el producto se agregue automáticamente al carrito.
-
-Códigos de ejemplo:
-
-* `7501234567890` — Coca-Cola.
-* `7509876543210` — Agua Cristal.
-* `7701234567890` — Arroz Diana.
-
-### Prueba de exportación
-
-1. Ir a **Más → Reportes**.
-2. Tocar **PDF** en el reporte de ventas.
-3. Verificar que aparezca el menú para compartir.
-4. Guardar el archivo o compartirlo.
-
-### Prueba del modo offline
-
-El modo offline todavía no está implementado. Está previsto para la Fase 2.
-
----
-
-## 10. Endpoints del API
-
-Base URL:
-
-```text
-http://localhost/interworld/api
-```
-
-Todos los endpoints requieren:
-
-```http
-Authorization: Bearer <token>
-```
-
-excepto los endpoints de login, registro de negocio y health check.
-
-### Autenticación
-
-```http
-POST   /auth/login
-POST   /auth/registrar-negocio
-POST   /auth/register
-GET    /auth/me
-POST   /auth/logout
-```
-
-### Usuarios — solo administrador
-
-```http
-GET    /usuarios
-GET    /usuarios/{id}
-POST   /usuarios
-PUT    /usuarios/{id}
-DELETE /usuarios/{id}
-```
-
-### Categorías
-
-```http
-GET    /categorias
-GET    /categorias/{id}
-POST   /categorias
-PUT    /categorias/{id}
-DELETE /categorias/{id}
-```
-
-### Proveedores
-
-```http
-GET    /proveedores
-GET    /proveedores/{id}
-POST   /proveedores
-PUT    /proveedores/{id}
-DELETE /proveedores/{id}
-```
-
-### Productos
-
-```http
-GET    /productos
-GET    /productos/{id}
-GET    /productos/barcode/{codigo}
-GET    /productos/stock-bajo
-POST   /productos
-PUT    /productos/{id}
-DELETE /productos/{id}
-```
-
-### Clientes
-
-```http
-GET    /clientes
-GET    /clientes/{id}
-GET    /clientes/{id}/estado-cuenta
-POST   /clientes
-PUT    /clientes/{id}
-DELETE /clientes/{id}
-POST   /clientes/{id}/pagos
-```
-
-### Inventario
-
-```http
-POST   /inventario/movimientos
-GET    /inventario/movimientos
-```
-
-### Ventas
-
-```http
-POST   /ventas
-GET    /ventas
-GET    /ventas/{id}
-POST   /ventas/{id}/anular
-```
-
-### Devoluciones
-
-```http
-GET    /devoluciones
-GET    /devoluciones/{id}
-POST   /devoluciones
-```
-
-### Promociones
-
-```http
-GET    /promociones
-GET    /promociones/vigentes
-GET    /promociones/{id}
-POST   /promociones
-PUT    /promociones/{id}
-DELETE /promociones/{id}
-```
-
-### Órdenes de compra
-
-```http
-GET    /ordenes-compra
-GET    /ordenes-compra/{id}
-POST   /ordenes-compra
-POST   /ordenes-compra/{id}/estado
-POST   /ordenes-compra/{id}/recibir
-```
-
-### Lealtad
-
-```http
-GET    /lealtad/ranking
-GET    /lealtad/cliente/{id}
-GET    /lealtad/cliente/{id}/historial
-POST   /lealtad/cliente/{id}/canjear
-POST   /lealtad/cliente/{id}/ajustar
-```
-
-### Caja
-
-```http
-GET    /caja/estado
-POST   /caja/abrir
-POST   /caja/{id}/cerrar
-POST   /caja/{id}/movimientos
-GET    /caja/{id}/movimientos
-GET    /caja/historial
-```
-
-### Reportes
-
-```http
-GET    /reportes/resumen
-GET    /reportes/ventas-por-dia
-GET    /reportes/productos-mas-vendidos
-GET    /reportes/stock-bajo
-GET    /reportes/cartera
-```
-
-### Dashboard
-
-```http
-GET    /dashboard/resumen
-GET    /dashboard/avanzado
-GET    /dashboard/comparacion
-```
-
-### Búsqueda global
-
-```http
-GET    /buscar?q=termino
-```
-
-### Notificaciones
-
-```http
-GET    /notificaciones
-PATCH  /notificaciones/{id}/leida
-POST   /notificaciones/marcar-todas
-```
-
-### Auditoría
-
-```http
-GET    /auditoria
-```
-
-### Configuración
-
-```http
-GET    /configuracion
-PUT    /configuracion
-```
-
-### Uploads
-
-```http
-POST   /uploads/productos
-POST   /uploads/logo
-```
-
----
-
-## 11. Base de datos
-
-TiendaAdmin utiliza MySQL con InnoDB y `utf8mb4`.
-
-Actualmente contiene 21 tablas:
-
-1. `negocios`
-2. `usuarios`
-3. `categorias`
-4. `proveedores`
-5. `productos`
-6. `clientes`
-7. `caja_sesiones`
-8. `caja_movimientos`
-9. `ventas`
-10. `venta_detalle`
-11. `movimientos_inventario`
-12. `pagos_credito`
-13. `devoluciones`
-14. `devolucion_detalle`
-15. `promociones`
-16. `ordenes_compra`
-17. `orden_compra_detalle`
-18. `puntos_historial`
-19. `notificaciones`
-20. `auditoria_logs`
-21. `configuracion`
-
-Las tablas incluyen `created_at` y `updated_at` donde corresponde, además de índices en columnas de búsqueda y claves foráneas con las reglas `ON DELETE` y `ON UPDATE` correspondientes.
-
----
-
-## 12. Scripts disponibles
-
-Los scripts se encuentran en:
-
-```text
-backend/scripts/
-```
-
-| Script               | Función                                    |
-| -------------------- | ------------------------------------------ |
-| `migrate.php`        | Ejecuta migraciones en orden               |
-| `seed.php`           | Carga datos semilla                        |
-| `hash-passwords.php` | Genera hashes BCRYPT reales                |
-| `reset.php`          | Borra todas las tablas                     |
-| `diagnostico.php`    | Verifica la integridad de la base de datos |
-| `debug-login.php`    | Debug del flujo de login                   |
-| `debug-auth.php`     | Debug de autenticación y JWT               |
-| `fix-passwords.php`  | Fuerza la regeneración de hashes           |
-
-Ejecutar un script:
-
-```powershell
-cd C:\xampp\htdocs\interworld
-php scripts/nombre-script.php
-```
-
----
-
-## 13. Solución de problemas
-
-### Error `Network Error` en la aplicación
-
-* Verificar que la IP del `.env` coincida con la IP local de la PC.
-* Reiniciar Expo con:
-
-```powershell
+``` bash
 npx expo start -c
 ```
 
-* Verificar que Apache esté activo en XAMPP.
-* Permitir Apache en el Firewall de Windows.
-* Confirmar que el celular y la PC estén en la misma red WiFi.
+> Las variables `EXPO_PUBLIC_*` quedan accesibles desde la aplicación
+> cliente. No guardes contraseñas, claves privadas ni secretos del
+> servidor en ellas.
 
-### Apache no arranca
+## Ejecución
 
-Otro programa puede estar utilizando el puerto 80.
+### Aplicación móvil
 
-Cambiar el puerto en:
+1.  Inicia Apache y MySQL desde XAMPP.
+2.  En una terminal, ejecuta:
 
-```text
-xampp/apache/conf/httpd.conf
-```
-
-### MySQL no arranca
-
-El puerto `3306` puede estar ocupado.
-
-Cambiar el puerto en:
-
-```text
-xampp/mysql/bin/my.ini
-```
-
-### `JWT_SECRET` no configurado
-
-* Verificar que exista `.env` en:
-
-```text
-C:\xampp\htdocs\interworld\
-```
-
-* Verificar que `JWT_SECRET` tenga al menos 32 caracteres.
-* Generar un secreto nuevo si es necesario.
-* Reiniciar Apache.
-
-### Credenciales inválidas
-
-* Verificar que la base de datos tenga los dos usuarios.
-* Ejecutar:
-
-```powershell
-php scripts/hash-passwords.php
-```
-
-* Si continúa el problema, ejecutar:
-
-```powershell
-php scripts/fix-passwords.php
-```
-
-* Como último recurso, reimportar `tienda_db.sql`.
-
-### `SQLSTATE HY093 Invalid parameter number`
-
-Puede deberse a placeholders duplicados en una consulta.
-
-Utilizar, por ejemplo:
-
-```text
-:q1
-:q2
-```
-
-en lugar de repetir:
-
-```text
-:q
-```
-
-### `Table doesn't exist`
-
-Falta ejecutar una migración o importar correctamente la base de datos.
-
-Volver a ejecutar el SQL correspondiente desde phpMyAdmin.
-
-### La cámara no funciona
-
-* La cámara funciona en un celular físico.
-* Verificar los permisos de cámara de Expo Go.
-* Revisar que `app.json` tenga configurado el plugin de `expo-camera`.
-
-### El escáner no detecta códigos
-
-* Utilizar buena iluminación.
-* Mantener el celular aproximadamente a 10–15 cm del código.
-* Verificar que el código exista en la base de datos.
-* Formatos soportados:
-
-  * EAN-13
-  * EAN-8
-  * UPC-A
-  * UPC-E
-  * Code-128
-  * Code-39
-  * QR
-
-### Reportes PDF o Excel no se generan
-
-Verificar que estén instalados:
-
-* `expo-print`
-* `expo-sharing`
-* `expo-file-system/legacy`
-* `xlsx`
-
-También revisar los permisos del sistema.
-
-### Errores de TypeScript
-
-Ejecutar:
-
-```powershell
+``` bash
 cd frontend
+npx expo start -c
+```
+
+3.  Abre Expo Go en el teléfono.
+4.  Escanea el código QR que aparece en la terminal.
+
+El teléfono y el ordenador deben estar conectados a la misma red Wi-Fi,
+y el backend debe ser accesible desde el teléfono.
+
+### Ejecutar en navegador
+
+``` bash
+cd frontend
+npx expo start --web
+```
+
+Algunas funciones nativas, como el acceso a la cámara, pueden no estar
+disponibles en el navegador.
+
+### Emulador Android
+
+``` bash
+npx expo start --android
+```
+
+### Simulador iOS
+
+Disponible en macOS con el entorno de desarrollo de iOS configurado:
+
+``` bash
+npx expo start --ios
+```
+
+### Atajos de Metro
+
+  Tecla        Acción
+  ------------ -----------------------------
+  `r`          Recargar la aplicación
+  `m`          Abrir el menú de desarrollo
+  `j`          Abrir el depurador
+  `Ctrl + C`   Detener el servidor
+
+## Pruebas
+
+### Backend: pruebas end-to-end
+
+Con Apache y MySQL activos, ejecuta desde el directorio real del
+backend:
+
+``` bash
+php test_e2e.php
+```
+
+La documentación original registra una ejecución de referencia con 38
+pruebas aprobadas y 0 fallidas. El resultado actual debe confirmarse
+ejecutando el comando en tu entorno.
+
+Las pruebas cubren, entre otras áreas:
+
+-   Registro de negocio y autenticación.
+-   Validación de JWT.
+-   CRUD de categorías, productos, clientes y proveedores.
+-   Estadísticas de productos y promociones.
+-   Apertura, movimientos y cierre de caja.
+-   Ventas de contado y a crédito.
+-   Distribución de descuentos por línea.
+-   Dashboard y aislamiento multi-tenant.
+
+### Frontend: Jest
+
+``` bash
+cd frontend
+npm test
+```
+
+Modo observación:
+
+``` bash
+npm run test:watch
+```
+
+Cobertura:
+
+``` bash
+npm test -- --coverage
+```
+
+### Verificación de TypeScript
+
+``` bash
 npx tsc --noEmit
 ```
 
-Errores comunes:
+Ejecuta el comando desde `frontend/`. La documentación original menciona
+más de 190 pruebas distribuidas en 13 suites; comprueba el estado actual
+mediante Jest.
 
-* Imports duplicados.
-* Módulos faltantes.
-* `useNavigation` tipado incorrectamente.
+## API
 
----
+URL base local:
 
-## 14. Notas importantes de instalación
-
-### Hashes de contraseñas placeholder
-
-El archivo `sql/tienda_db.sql` incluye dos usuarios semilla con las contraseñas:
-
-```text
-admin123
-vendedor123
+``` text
+http://localhost/tiendaapi/api
 ```
 
-Los hashes almacenados inicialmente son placeholders y no son hashes BCRYPT reales.
+Las respuestas siguen una estructura JSON común:
 
-Por esta razón, el login de las cuentas demo puede fallar hasta regenerar los hashes.
-
-Ejecutar:
-
-```powershell
-cd C:\xampp\htdocs\interworld
-php scripts/fix-passwords.php
+``` json
+{
+  "success": true,
+  "data": {},
+  "message": "Operación exitosa"
+}
 ```
 
-Debe mostrar:
+### Autenticación
 
-```text
-admin@tienda.com  → password_verify('admin123') = OK
-vendedor@tienda.com → password_verify('vendedor123') = OK
+  ---------------------------------------------------------------------------------
+  Método            Endpoint                    Descripción       Autenticación
+  ----------------- --------------------------- ----------------- -----------------
+  `POST`            `/auth/registrar-negocio`   Registrar negocio No
+                                                y administrador   
+
+  `POST`            `/auth/login`               Iniciar sesión    No
+
+  `POST`            `/auth/logout`              Cerrar sesión     Sí
+
+  `GET`             `/auth/me`                  Consultar usuario Sí
+                                                actual            
+
+  `POST`            `/auth/register`            Crear usuario     Admin
+  ---------------------------------------------------------------------------------
+
+### Productos
+
+  Método     Endpoint                         Descripción
+  ---------- -------------------------------- ------------------------------------
+  `GET`      `/productos`                     Listar productos y aplicar filtros
+  `POST`     `/productos`                     Crear producto
+  `GET`      `/productos/{id}`                Consultar producto
+  `PUT`      `/productos/{id}`                Actualizar producto
+  `DELETE`   `/productos/{id}`                Desactivar producto
+  `GET`      `/productos/buscar?codigo=X`     Buscar por código de barras
+  `GET`      `/productos/stock-bajo`          Consultar stock bajo
+  `GET`      `/productos/{id}/estadisticas`   Consultar rendimiento
+
+### Ventas
+
+  Método   Endpoint                Descripción
+  -------- ----------------------- ---------------------------
+  `GET`    `/ventas`               Listar ventas con filtros
+  `POST`   `/ventas`               Registrar venta
+  `GET`    `/ventas/{id}`          Consultar detalle
+  `POST`   `/ventas/{id}/anular`   Anular venta
+
+### Caja
+
+  Método   Endpoint                   Descripción
+  -------- -------------------------- --------------------------
+  `GET`    `/caja/estado`             Consultar estado de caja
+  `POST`   `/caja/abrir`              Abrir caja
+  `POST`   `/caja/{id}/cerrar`        Cerrar caja
+  `POST`   `/caja/{id}/movimientos`   Registrar movimiento
+  `GET`    `/caja/{id}/movimientos`   Listar movimientos
+  `GET`    `/caja/historial`          Consultar historial
+
+### Otros módulos
+
+  Método     Endpoint                 Descripción
+  ---------- ------------------------ ---------------------------
+  `GET`      `/dashboard/avanzado`    Consultar dashboard
+  `GET`      `/promociones`           Listar promociones
+  `POST`     `/promociones`           Crear promoción
+  `DELETE`   `/promociones/{id}`      Eliminar promoción
+  `GET`      `/clientes`              Listar clientes
+  `POST`     `/clientes`              Crear cliente
+  `POST`     `/clientes/{id}/pagos`   Registrar pago de cliente
+
+La referencia anterior es un resumen de los endpoints documentados.
+Consulta `backend/docs/API.md` para conocer parámetros, validaciones y
+respuestas completas.
+
+Las rutas protegidas requieren el encabezado:
+
+``` http
+Authorization: Bearer <token>
 ```
 
-### Verificación manual de los hashes
+## Roles y permisos
 
-```powershell
-mysql -u root tienda_db -e "SELECT id, email, LEFT(password_hash, 10) FROM usuarios;"
+  Acción                      Administrador   Vendedor
+  -------------------------- --------------- ----------
+  Ver dashboard                    Sí            Sí
+  Vender en el POS                 Sí            Sí
+  Consultar productos              Sí            Sí
+  Crear y editar productos         Sí            No
+  Desactivar productos             Sí            No
+  Abrir y cerrar caja              Sí            No
+  Gestionar clientes               Sí            Sí
+  Ver reportes                     Sí            No
+  Gestionar usuarios               Sí            No
+  Gestionar proveedores            Sí            No
+  Configurar el negocio            Sí            No
+  Consultar auditoría              Sí            No
+
+Según la documentación del proyecto, los usuarios vendedores se crean
+desde **Más → Usuarios → Nuevo**.
+
+## Solución de problemas
+
+### La aplicación muestra `Network error`
+
+1.  Comprueba que Apache y MySQL estén activos.
+
+2.  Verifica el backend en el ordenador:
+
+    ``` text
+    http://localhost/tiendaapi/api/auth/me
+    ```
+
+3.  Abre desde el teléfono la misma ruta usando la IP local del
+    ordenador.
+
+4.  Confirma que ambos dispositivos estén en la misma red Wi-Fi.
+
+5.  Revisa `EXPO_PUBLIC_API_URL` en `frontend/.env`.
+
+6.  Comprueba las reglas del firewall.
+
+7.  Reinicia Expo:
+
+    ``` bash
+    npx expo start -c
+    ```
+
+### Token inválido o expirado
+
+-   Cierra la sesión e inicia sesión de nuevo.
+-   Si el problema persiste, limpia los datos de almacenamiento de la
+    aplicación desde las herramientas de desarrollo disponibles.
+
+### Pantalla en blanco
+
+-   Abre el menú de desarrollo de Expo Go.
+-   Limpia la caché o los datos locales de la aplicación si corresponde.
+-   Cierra y vuelve a abrir la aplicación.
+-   Revisa los errores de Metro y de la consola.
+
+### Apache no inicia
+
+Puede existir un conflicto con el puerto 80.
+
+1.  Identifica qué proceso utiliza el puerto.
+2.  Si procede, cambia la configuración de Apache, por ejemplo a `8080`.
+3.  Reinicia Apache.
+4.  Actualiza `EXPO_PUBLIC_API_URL` con el puerto configurado.
+
+### MySQL no inicia
+
+Revisa los registros de MySQL y comprueba si existe otro proceso usando
+el puerto o si hay errores en los archivos de datos. Antes de modificar
+o reemplazar el directorio de datos, realiza una copia de seguridad y
+sigue un procedimiento de recuperación adecuado.
+
+### Error 500 en el backend
+
+Consulta los logs del backend. En PowerShell, desde la carpeta del
+backend:
+
+``` powershell
+Get-ChildItem storage\logs\ |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1 |
+  Get-Content -Tail 30
 ```
 
-Los hashes deben comenzar con:
+No compartas públicamente registros que contengan tokens, credenciales u
+otros datos sensibles.
 
-```text
-$2y$10$
+### `npm install` falla con `ERESOLVE`
+
+Prueba, si es necesario:
+
+``` bash
+npm install --legacy-peer-deps
 ```
 
-### Nombre de la carpeta del backend
+Si el error continúa, revisa las versiones de Node.js y las dependencias
+declaradas en `package.json`.
 
-Por defecto, el proyecto utiliza:
+### Verificación del aislamiento multi-tenant
 
-```text
-C:\xampp\htdocs\interworld\
+Comprueba que la autenticación identifique el negocio actual y que las
+consultas de los modelos apliquen el filtro por `negocio_id`. Ejecuta
+las pruebas end-to-end para verificar el aislamiento entre negocios.
+
+## Despliegue
+
+### Backend en hosting compartido
+
+1.  Sube el backend al servidor.
+
+2.  Crea la base de datos y configura sus credenciales.
+
+3.  Define las variables de entorno de producción.
+
+4.  Instala dependencias sin paquetes de desarrollo:
+
+    ``` bash
+    composer install --no-dev --optimize-autoloader
+    ```
+
+5.  Habilita HTTPS.
+
+6.  Restringe CORS a los dominios autorizados.
+
+7.  Verifica permisos de archivos y directorios, especialmente los de
+    almacenamiento.
+
+### Backend en VPS
+
+1.  Prepara el servidor web, PHP-FPM y MySQL.
+2.  Configura Nginx o el servidor elegido para publicar la API.
+3.  Instala un certificado TLS, por ejemplo con Certbot.
+4.  Configura las variables de entorno y permisos.
+5.  Restringe CORS y revisa logs, copias de seguridad y acceso a la base
+    de datos.
+
+### Aplicación móvil con EAS
+
+``` bash
+cd frontend
+npm install -g eas-cli
+eas login
+eas build:configure
+eas build --platform android
+eas build --platform ios
 ```
 
-Si se cambia el nombre de la carpeta, actualizar:
+La compilación para iOS requiere la configuración y las credenciales
+correspondientes de Apple.
 
-1. `.htaccess`.
-2. `.env`.
-3. `test_completo.php`.
+Para publicar, sigue los procesos de cada tienda. La documentación
+original contempla Google Play mediante el archivo `.aab` y App Store
+mediante EAS Submit.
 
-#### `.htaccess`
+## Convenciones de desarrollo
 
-```apache
-RewriteBase /NOMBRE_DE_TU_CARPETA/
+### Commits
+
+Usa mensajes breves y descriptivos siguiendo una convención consistente:
+
+  Prefijo       Uso
+  ------------- ---------------------------------
+  `feat:`       Nueva funcionalidad
+  `fix:`        Corrección de errores
+  `docs:`       Documentación
+  `style:`      Formato sin cambios funcionales
+  `refactor:`   Reorganización interna
+  `test:`       Pruebas
+  `chore:`      Mantenimiento
+
+Ejemplo:
+
+``` bash
+git commit -m "feat: agrega gestión de promociones"
 ```
 
-#### `.env`
+### Ramas
 
-```env
-APP_URL=http://localhost/NOMBRE_DE_TU_CARPETA
+``` text
+main
+develop
+feature/nombre-funcionalidad
+fix/nombre-correccion
 ```
 
-#### `test_completo.php`
+### Flujo de trabajo sugerido
 
-```php
-$base = 'http://localhost/NOMBRE_DE_TU_CARPETA/api';
+``` bash
+git checkout develop
+git pull origin develop
+git checkout -b feature/nueva-funcionalidad
+
+# Realizar los cambios
+git add .
+git commit -m "feat: agrega nueva funcionalidad"
+git push origin feature/nueva-funcionalidad
+
+# Después, abrir un Pull Request hacia develop
 ```
 
-Después de cambiar el nombre, reiniciar Apache.
+### Estilo de código
 
-### Orden correcto de instalación
+-   TypeScript con modo estricto.
+-   ESLint y Prettier, según la configuración del proyecto.
+-   Componentes en `PascalCase`.
+-   Funciones y variables en `camelCase`.
+-   Constantes en `UPPER_SNAKE_CASE`.
+-   Componentes React Native en archivos `.tsx`.
 
-Seguir este orden:
+## Licencia
 
-1. Copiar la carpeta a `htdocs` y renombrarla.
-2. Ejecutar `composer install`.
-3. Configurar `.env`.
-4. Importar `sql/tienda_db.sql` en phpMyAdmin.
-5. Ejecutar `php scripts/hash-passwords.php` o `php scripts/fix-passwords.php`.
-6. Verificar:
+Este proyecto se distribuye bajo la licencia **MIT**. Consulta el
+archivo [`LICENSE`](LICENSE) para ver los términos completos.
 
-```text
-http://localhost/interworld/api/health
-```
+## Autor y soporte
 
-7. Ejecutar:
+**Antony Peña**
 
-```powershell
-php test_completo.php
-```
+-   GitHub: [@tu-usuario](https://github.com/tu-usuario)
+-   Correo: `tu@correo.com`
 
-Si múltiples endpoints muestran errores de autenticación, verificar primero que el login funcione correctamente.
+> Actualiza el usuario de GitHub y el correo antes de publicar el
+> repositorio.
 
-### Verificación rápida de la instalación
+Para reportar un error o proponer una mejora:
 
-Ejecutar:
+1.  Comprueba si ya existe un issue relacionado.
+2.  Crea un issue con una descripción clara.
+3.  Incluye los pasos para reproducir el problema.
+4.  Adjunta capturas y logs relevantes, eliminando previamente cualquier
+    dato sensible.
 
-```powershell
-cd C:\xampp\htdocs\interworld
+------------------------------------------------------------------------
 
-# 1. Verificar PHP y extensiones
-php -m | findstr /C:"pdo_mysql" /C:"mbstring" /C:"openssl" /C:"curl" /C:"zip" /C:"gd"
+::: {align="center"}
+**InterWorld**
 
-# 2. Verificar sintaxis de los archivos principales
-php -l index.php
-php -l routes\api.php
-
-# 3. Verificar conexión a la base de datos
-php scripts\diagnostico.php
-
-# 4. Verificar el health check
-curl http://localhost/interworld/api/health
-
-# 5. Ejecutar el test completo
-php test_completo.php
-```
-
-Cada paso debe completarse sin errores antes de continuar.
-
-### Tablas que deben existir
-
-Después de importar `sql/tienda_db.sql`:
-
-```powershell
-mysql -u root tienda_db -e "SHOW TABLES;"
-```
-
-Deben existir estas 21 tablas:
-
-```text
-auditoria_logs
-caja_movimientos
-caja_sesiones
-categorias
-clientes
-configuracion
-devolucion_detalle
-devoluciones
-movimientos_inventario
-negocios
-notificaciones
-orden_compra_detalle
-ordenes_compra
-pagos_credito
-productos
-promociones
-proveedores
-puntos_historial
-usuarios
-venta_detalle
-ventas
-```
-
-### Resultado esperado del test completo
-
-Cuando el backend está correctamente instalado:
-
-```text
-Total:    60
-Pasaron:  60
-Fallaron: 0
-```
-
-Si pasan menos de 60, revisar los errores agrupados por causa.
-
-| Síntoma                                         | Causa                       | Solución                          |
-| ----------------------------------------------- | --------------------------- | --------------------------------- |
-| 55+ fallos con `Token de autenticación ausente` | Login inicial falló         | Ejecutar `fix-passwords.php`      |
-| Fallos con `Table doesn't exist`                | Falta una tabla o migración | Importar `tienda_db.sql` completo |
-| Registro de negocio falla por tabla `negocios`  | Falta la tabla `negocios`   | Reimportar `tienda_db.sql`        |
-| Error de conexión                               | MySQL no está corriendo     | Arrancar MySQL en XAMPP           |
-| Endpoint no encontrado                          | Problema con `RewriteBase`  | Revisar `.htaccess`               |
-
-### Ver los logs del backend
-
-Los errores se almacenan en:
-
-```text
-storage/logs/
-```
-
-Por ejemplo:
-
-```powershell
-cd C:\xampp\htdocs\interworld
-Get-Content storage\logs\app-YYYY-MM-DD.log -Tail 40
-```
-
-Reemplazar `YYYY-MM-DD` por la fecha correspondiente.
-
-Cada línea contiene información como:
-
-* Timestamp.
-* Nivel.
-* Mensaje.
-* Archivo.
-* Línea.
-* Contexto adicional.
-
-### Modo debug
-
-Para desarrollo:
-
-```env
-APP_DEBUG=true
-```
-
-Los errores muestran detalles adicionales.
-
-Para producción:
-
-```env
-APP_DEBUG=false
-```
-
-Los usuarios reciben mensajes genéricos y los detalles permanecen en los logs.
-
-Reiniciar Apache después de modificar este valor.
-
-### Estado de `vendor/`
-
-La carpeta `vendor/` contiene las dependencias instaladas por Composer.
-
-No debe subirse a GitHub.
-
-Al clonar el proyecto en otro equipo:
-
-```powershell
-composer install
-```
-
-### Estado de `.env`
-
-El archivo `.env` contiene credenciales y secretos.
-
-No debe subirse a GitHub.
-
-Al clonar el proyecto:
-
-1. Copiar `.env.example` a `.env`.
-2. Configurar los valores específicos del entorno.
-3. Generar un nuevo `JWT_SECRET`:
-
-```powershell
-php -r "echo base64_encode(random_bytes(48));"
-```
-
-Cada instalación debe tener su propio `JWT_SECRET`.
-
----
-
-## 15. Roadmap
-
-### Fase 1 — Completada
-
-* Dashboard avanzado con gráficos.
-* Reportes exportables a PDF y Excel.
-* Búsqueda global.
-* Devoluciones completas.
-* Promociones.
-* Órdenes de compra.
-* Programa de lealtad.
-* Onboarding y centro de ayuda.
-* Multi-tenant con registro de negocios.
-
-### Fase 2 — Próximamente
-
-* Modo offline-first.
-* Multi-sucursal.
-* Impresión térmica ESC/POS Bluetooth.
-* Notificaciones push reales.
-* Backup y restore automático.
-* Recuperación de contraseña por email.
-
-### Fase 3 — Profesionalización
-
-* Tests automatizados con PHPUnit y Jest.
-* CI/CD con GitHub Actions.
-* Sentry para manejo de errores.
-* Analytics con Firebase.
-* Logging avanzado con correlación de requests.
-
-### Fase 4 — Nivel comercial
-
-* Facturación electrónica DIAN.
-* Integración con pasarelas de pago.
-* Dashboard web.
-* Aplicación para clientes.
-* E-commerce integrado.
-* API pública con OpenAPI.
-* White label.
-
+*Tecnología para una gestión comercial más simple.*
+:::

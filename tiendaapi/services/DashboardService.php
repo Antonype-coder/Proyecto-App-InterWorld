@@ -1,11 +1,8 @@
 <?php
 declare(strict_types=1);
 
-/**
- * DashboardService — agregaciones analíticas para el dashboard.
- * Todas las consultas asumen tablas existentes (ventas, venta_detalle,
- * productos, clientes, caja_sesiones). Usa rangos inclusivos de fechas.
- */
+require_once __DIR__ . '/../core/Auth.php';
+
 class DashboardService
 {
     private PDO $db;
@@ -15,7 +12,11 @@ class DashboardService
         $this->db = $db;
     }
 
-    /** Payload completo del dashboard en una sola llamada. */
+    private function nid(): ?int
+    {
+        return class_exists('Auth') ? Auth::negocioId() : null;
+    }
+
     public function resumenCompleto(string $desde, string $hasta, bool $comparar = true): array
     {
         $actual = $this->calcularMetricas($desde, $hasta);
@@ -41,21 +42,29 @@ class DashboardService
         return $data;
     }
 
-    /** KPIs principales del rango. */
     public function calcularMetricas(string $desde, string $hasta): array
     {
+        $nid = $this->nid();
+
         $sql = "SELECT
                     COALESCE(SUM(total), 0)              AS totalVentas,
                     COUNT(*)                             AS numVentas,
                     COALESCE(AVG(total), 0)              AS ticketPromedio,
-                    COALESCE(SUM(descuento_total), 0)    AS descuentos,
+                    COALESCE(SUM(descuento), 0)          AS descuentos,
                     COALESCE(SUM(CASE WHEN tipo_pago = 'credito' THEN total ELSE 0 END), 0) AS totalCredito,
                     COALESCE(SUM(CASE WHEN tipo_pago = 'contado' THEN total ELSE 0 END), 0) AS totalContado
                 FROM ventas
                 WHERE estado = 'completada'
                   AND DATE(created_at) BETWEEN :desde AND :hasta";
+
+        $params = [':desde' => $desde, ':hasta' => $hasta];
+        if ($nid !== null) {
+            $sql .= " AND negocio_id = :nid";
+            $params[':nid'] = $nid;
+        }
+
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([':desde' => $desde, ':hasta' => $hasta]);
+        $stmt->execute($params);
         $row = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
 
         $costo = $this->costoMercanciaVendida($desde, $hasta);
@@ -78,14 +87,23 @@ class DashboardService
 
     private function costoMercanciaVendida(string $desde, string $hasta): float
     {
+        $nid = $this->nid();
+
         $sql = "SELECT COALESCE(SUM(vd.cantidad * p.precio_compra), 0)
                 FROM venta_detalle vd
-                INNER JOIN ventas v   ON v.id = vd.venta_id
+                INNER JOIN ventas v    ON v.id = vd.venta_id
                 INNER JOIN productos p ON p.id = vd.producto_id
                 WHERE v.estado = 'completada'
                   AND DATE(v.created_at) BETWEEN :desde AND :hasta";
+
+        $params = [':desde' => $desde, ':hasta' => $hasta];
+        if ($nid !== null) {
+            $sql .= " AND v.negocio_id = :nid";
+            $params[':nid'] = $nid;
+        }
+
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([':desde' => $desde, ':hasta' => $hasta]);
+        $stmt->execute($params);
         return (float)($stmt->fetchColumn() ?: 0);
     }
 
@@ -118,18 +136,27 @@ class DashboardService
         return $out;
     }
 
-    /** Serie diaria con días vacíos rellenados (para gráfico de línea). */
     public function ventasPorDia(string $desde, string $hasta): array
     {
+        $nid = $this->nid();
+
         $sql = "SELECT DATE(created_at) AS fecha,
                        COUNT(*)         AS numVentas,
                        COALESCE(SUM(total), 0) AS total
                 FROM ventas
                 WHERE estado = 'completada'
-                  AND DATE(created_at) BETWEEN :desde AND :hasta
-                GROUP BY DATE(created_at)";
+                  AND DATE(created_at) BETWEEN :desde AND :hasta";
+        $params = [':desde' => $desde, ':hasta' => $hasta];
+
+        if ($nid !== null) {
+            $sql .= " AND negocio_id = :nid";
+            $params[':nid'] = $nid;
+        }
+
+        $sql .= " GROUP BY DATE(created_at)";
+
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([':desde' => $desde, ':hasta' => $hasta]);
+        $stmt->execute($params);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
         $map = [];
@@ -155,19 +182,27 @@ class DashboardService
         return $out;
     }
 
-    /** Matriz 7x24 para heatmap. Día 1=Dom (MySQL DAYOFWEEK). */
     public function ventasPorHora(string $desde, string $hasta): array
     {
+        $nid = $this->nid();
+
         $sql = "SELECT DAYOFWEEK(created_at) AS dia,
                        HOUR(created_at)       AS hora,
                        COUNT(*)               AS numVentas,
                        COALESCE(SUM(total), 0) AS total
                 FROM ventas
                 WHERE estado = 'completada'
-                  AND DATE(created_at) BETWEEN :desde AND :hasta
-                GROUP BY dia, hora";
+                  AND DATE(created_at) BETWEEN :desde AND :hasta";
+        $params = [':desde' => $desde, ':hasta' => $hasta];
+
+        if ($nid !== null) {
+            $sql .= " AND negocio_id = :nid";
+            $params[':nid'] = $nid;
+        }
+        $sql .= " GROUP BY dia, hora";
+
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([':desde' => $desde, ':hasta' => $hasta]);
+        $stmt->execute($params);
         $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
 
         $matrix = [];
@@ -188,41 +223,82 @@ class DashboardService
 
     public function metodosPago(string $desde, string $hasta): array
     {
-        $sql = "SELECT COALESCE(metodo_pago, 'efectivo') AS metodo,
-                       COUNT(*)                        AS numVentas,
-                       COALESCE(SUM(total), 0)         AS total
-                FROM ventas
-                WHERE estado = 'completada'
-                  AND DATE(created_at) BETWEEN :desde AND :hasta
-                GROUP BY metodo
-                ORDER BY total DESC";
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute([':desde' => $desde, ':hasta' => $hasta]);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+        $nid = $this->nid();
+
+        $sql = "SELECT cm.metodo_pago AS metodo,
+                       COUNT(*)        AS numVentas,
+                       COALESCE(SUM(cm.monto), 0) AS total
+                FROM caja_movimientos cm
+                WHERE cm.tipo = 'venta'
+                  AND DATE(cm.created_at) BETWEEN :desde AND :hasta";
+        $params = [':desde' => $desde, ':hasta' => $hasta];
+
+        if ($nid !== null) {
+            $sql .= " AND cm.negocio_id = :nid";
+            $params[':nid'] = $nid;
+        }
+        $sql .= " GROUP BY cm.metodo_pago ORDER BY total DESC";
+
+        try {
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
+            if (!empty($rows)) return $rows;
+        } catch (Throwable $e) {
+            // Fallback
+        }
+
+        $sql2 = "SELECT 'efectivo' AS metodo,
+                        COUNT(*) AS numVentas,
+                        COALESCE(SUM(total), 0) AS total
+                 FROM ventas
+                 WHERE estado = 'completada'
+                   AND DATE(created_at) BETWEEN :desde AND :hasta";
+        $params2 = [':desde' => $desde, ':hasta' => $hasta];
+        if ($nid !== null) {
+            $sql2 .= " AND negocio_id = :nid";
+            $params2[':nid'] = $nid;
+        }
+
+        $stmt2 = $this->db->prepare($sql2);
+        $stmt2->execute($params2);
+        return $stmt2->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
     public function topProductos(string $desde, string $hasta, int $limit = 10): array
     {
+        $nid = $this->nid();
         $limit = max(1, min(50, $limit));
+
+        // ⚡ Ahora resta el descuento por línea para mostrar lo REALMENTE cobrado
         $sql = "SELECT p.id, p.nombre, p.imagen,
-                       SUM(vd.cantidad)  AS cantidad,
-                       SUM(vd.subtotal)  AS total
+                       SUM(vd.cantidad)                      AS cantidad,
+                       SUM(vd.subtotal - vd.descuento)       AS total
                 FROM venta_detalle vd
                 INNER JOIN ventas v    ON v.id = vd.venta_id
                 INNER JOIN productos p ON p.id = vd.producto_id
                 WHERE v.estado = 'completada'
-                  AND DATE(v.created_at) BETWEEN :desde AND :hasta
-                GROUP BY p.id, p.nombre, p.imagen
-                ORDER BY cantidad DESC
-                LIMIT {$limit}";
+                  AND DATE(v.created_at) BETWEEN :desde AND :hasta";
+        $params = [':desde' => $desde, ':hasta' => $hasta];
+
+        if ($nid !== null) {
+            $sql .= " AND v.negocio_id = :nid";
+            $params[':nid'] = $nid;
+        }
+        $sql .= " GROUP BY p.id, p.nombre, p.imagen
+                  ORDER BY cantidad DESC
+                  LIMIT {$limit}";
+
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([':desde' => $desde, ':hasta' => $hasta]);
+        $stmt->execute($params);
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
     public function topClientes(string $desde, string $hasta, int $limit = 5): array
     {
+        $nid = $this->nid();
         $limit = max(1, min(20, $limit));
+
         $sql = "SELECT c.id, c.nombre,
                        COUNT(*)                 AS numVentas,
                        COALESCE(SUM(v.total),0) AS total
@@ -230,25 +306,42 @@ class DashboardService
                 INNER JOIN clientes c ON c.id = v.cliente_id
                 WHERE v.estado = 'completada'
                   AND v.cliente_id IS NOT NULL
-                  AND DATE(v.created_at) BETWEEN :desde AND :hasta
-                GROUP BY c.id, c.nombre
-                ORDER BY total DESC
-                LIMIT {$limit}";
+                  AND DATE(v.created_at) BETWEEN :desde AND :hasta";
+        $params = [':desde' => $desde, ':hasta' => $hasta];
+
+        if ($nid !== null) {
+            $sql .= " AND v.negocio_id = :nid";
+            $params[':nid'] = $nid;
+        }
+        $sql .= " GROUP BY c.id, c.nombre ORDER BY total DESC LIMIT {$limit}";
+
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([':desde' => $desde, ':hasta' => $hasta]);
+        $stmt->execute($params);
         return $stmt->fetchAll(PDO::FETCH_ASSOC) ?: [];
     }
 
     public function resumenCaja(): array
     {
-        $sql = "SELECT id, usuario_id, monto_apertura, total_ventas,
-                       total_ingresos, total_egresos, efectivo_esperado,
+        $nid = $this->nid();
+
+        $sql = "SELECT id, negocio_id, usuario_id, monto_apertura,
+                       total_ventas_efectivo, total_ventas_tarjeta, total_ventas_transferencia,
+                       total_ingresos, total_egresos,
                        estado, abierta_at
                 FROM caja_sesiones
-                WHERE estado = 'abierta'
-                ORDER BY id DESC
-                LIMIT 1";
-        $row = $this->db->query($sql)->fetch(PDO::FETCH_ASSOC);
+                WHERE estado = 'abierta'";
+        $params = [];
+
+        if ($nid !== null) {
+            $sql .= " AND negocio_id = :nid";
+            $params[':nid'] = $nid;
+        }
+        $sql .= " ORDER BY id DESC LIMIT 1";
+
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($params);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
         if (!$row) {
             return ['abierta' => false];
         }

@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 
 import { spacing, radius, typography } from '@theme/index';
@@ -19,6 +19,7 @@ import { useColors } from '@hooks/useColors';
 import { useChartColors } from '@hooks/useChartColors';
 import { useReturnTo } from '@hooks/useReturnTo';
 import { useCajaResumen } from '@hooks/useCajaResumen';
+import { useFocusedLoad } from '@hooks/useFocusedLoad';
 import { dashboardApi } from '@api/index';
 import { formatCurrency, formatDateTime } from '@utils/format';
 import type { DashboardAvanzado, DashboardPeriodo } from '@tipos/index';
@@ -32,6 +33,7 @@ import KpiHeroCard from '@components/ui/KpiHeroCard';
 import StatCard from '@components/ui/StatCard';
 import { LineChartCard, BarChartCard, DonutChartCard } from '@components/charts';
 import { StaggeredSection, ShineEffect, FadeInItem } from '@components/animations';
+import OnboardingBanner from '@components/domain/OnboardingBanner';
 
 const PERIODOS: { value: DashboardPeriodo; label: string }[] = [
   { value: 'hoy', label: 'Hoy' },
@@ -63,19 +65,17 @@ export default function DashboardScreen(): React.ReactElement {
       setData(res);
     } catch (e) {
       const mensaje = e instanceof Error ? e.message : 'Error al cargar';
-      setError(mensaje);
+      // Solo mostramos error si NO hay datos previos
+      if (!data) setError(mensaje);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periodo]);
 
-  useFocusEffect(
-    useCallback(() => {
-      setLoading(true);
-      void cargar();
-    }, [cargar]),
-  );
+  // ⚡ Carga optimizada: solo muestra skeleton la primera vez
+  useFocusedLoad(cargar, () => setLoading(true));
 
   const onRefresh = async (): Promise<void> => {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -163,6 +163,9 @@ export default function DashboardScreen(): React.ReactElement {
           />
         ) : data ? (
           <>
+            {/* ============ ONBOARDING TIENDA NUEVA ============ */}
+            {data.top_productos.length === 0 && data.ultimas_ventas.length === 0 && !data.caja_abierta ? ( <StaggeredSection delay={40}> <View style={styles.section}> <OnboardingBanner onConfigurar={() => goTo('Mas', 'Configuracion')} onCrearCategoria={() => goTo('Mas', 'Categorias')} onCrearProducto={() => navigation.navigate('Productos', { screen: 'ProductoForm', }) } onVender={() => navigation.navigate('Vender')} /> </View> </StaggeredSection> ) : null}
+
             {/* ============ KPI HERO ============ */}
             <StaggeredSection delay={80}>
               <View style={styles.section}>
@@ -174,8 +177,7 @@ export default function DashboardScreen(): React.ReactElement {
                     subtitle={`${data.kpis.ventas_periodo.actual.cantidad} transacciones · Ticket ${formatCurrency(data.kpis.ticket_promedio.valor)}`}
                     trend={{
                       direction: data.kpis.ventas_periodo.cambio.direccion,
-                      percentage:
-                        data.kpis.ventas_periodo.cambio.porcentaje,
+                      percentage: data.kpis.ventas_periodo.cambio.porcentaje,
                     }}
                     sparkData={sparkData}
                     sparkColor={chartColors.primary}
@@ -187,9 +189,7 @@ export default function DashboardScreen(): React.ReactElement {
             {/* ============ GRID DE STATS ============ */}
             <StaggeredSection delay={160}>
               <View style={styles.section}>
-                <Text
-                  style={[styles.sectionLabel, { color: colors.textMuted }]}
-                >
+                <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>
                   RESUMEN
                 </Text>
 
@@ -378,8 +378,7 @@ export default function DashboardScreen(): React.ReactElement {
                   data={data.metodos_pago.map((m, idx) => ({
                     label: m.label,
                     value: parseFloat(m.monto) || 0,
-                    color:
-                      chartColors.series[idx % chartColors.series.length],
+                    color: chartColors.series[idx % chartColors.series.length],
                   }))}
                   centerColor={chartColors.plum}
                 />
@@ -444,14 +443,10 @@ export default function DashboardScreen(): React.ReactElement {
                               : chartColors.mauve;
 
                       const rankBg =
-                        idx === 0
-                          ? chartColors.plumSubtle
-                          : colors.bgSubtle;
+                        idx === 0 ? chartColors.plumSubtle : colors.bgSubtle;
 
                       const rankColor =
-                        idx === 0
-                          ? chartColors.plum
-                          : colors.textPrimary;
+                        idx === 0 ? chartColors.plum : colors.textPrimary;
 
                       return (
                         <FadeInItem key={p.id} delay={700 + idx * 60}>
@@ -465,10 +460,7 @@ export default function DashboardScreen(): React.ReactElement {
                             ]}
                           >
                             <View
-                              style={[
-                                styles.rank,
-                                { backgroundColor: rankBg },
-                              ]}
+                              style={[styles.rank, { backgroundColor: rankBg }]}
                             >
                               <Text
                                 style={[
@@ -480,9 +472,7 @@ export default function DashboardScreen(): React.ReactElement {
                               </Text>
                             </View>
 
-                            <View
-                              style={{ flex: 1, marginLeft: spacing.md }}
-                            >
+                            <View style={{ flex: 1, marginLeft: spacing.md }}>
                               <Text
                                 style={[
                                   styles.topNombre,
@@ -816,10 +806,7 @@ function QuickAction(props: {
         ]}
       >
         <View
-          style={[
-            styles.quickIcon,
-            { backgroundColor: colors.bgSubtle },
-          ]}
+          style={[styles.quickIcon, { backgroundColor: colors.bgSubtle }]}
         >
           <MaterialCommunityIcons
             name={props.icon}
@@ -852,23 +839,11 @@ function DashboardSkeleton(): React.ReactElement {
       >
         <Skeleton width="40%" height={12} />
 
-        <Skeleton
-          width="60%"
-          height={32}
-          style={{ marginTop: spacing.md }}
-        />
+        <Skeleton width="60%" height={32} style={{ marginTop: spacing.md }} />
 
-        <Skeleton
-          width="70%"
-          height={12}
-          style={{ marginTop: spacing.sm }}
-        />
+        <Skeleton width="70%" height={12} style={{ marginTop: spacing.sm }} />
 
-        <Skeleton
-          width="100%"
-          height={40}
-          style={{ marginTop: spacing.lg }}
-        />
+        <Skeleton width="100%" height={40} style={{ marginTop: spacing.lg }} />
       </View>
 
       <View style={styles.grid}>

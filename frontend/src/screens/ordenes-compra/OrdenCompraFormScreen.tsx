@@ -82,9 +82,19 @@ export default function OrdenCompraFormScreen(): React.ReactElement {
     setBusqProd('');
   };
 
-  const setCantidad = (pid: number, cant: number): void => {
-    if (cant <= 0) { setItems((prev) => prev.filter((i) => i.producto_id !== pid)); return; }
-    setItems((prev) => prev.map((i) => i.producto_id === pid ? { ...i, cantidad: cant } : i));
+  // ✅ Fix: NO borra el item cuando el input queda vacío. Solo actualiza la cantidad.
+  const setCantidadTexto = (pid: number, texto: string): void => {
+    const limpio = texto.replace(/[^0-9]/g, '');
+    const n = limpio === '' ? 0 : parseInt(limpio, 10);
+    setItems((prev) =>
+      prev.map((i) => (i.producto_id === pid ? { ...i, cantidad: n } : i)),
+    );
+  };
+
+  // ✅ Fix: borrar SOLO desde el botón X.
+  const quitarItem = (pid: number): void => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setItems((prev) => prev.filter((i) => i.producto_id !== pid));
   };
 
   const setPrecio = (pid: number, precio: number): void => {
@@ -93,7 +103,14 @@ export default function OrdenCompraFormScreen(): React.ReactElement {
 
   const onSubmit = async (): Promise<void> => {
     if (!proveedorId) { setToast({ visible: true, message: 'Selecciona un proveedor', variant: 'error' }); return; }
-    if (items.length === 0) { setToast({ visible: true, message: 'Agrega al menos un producto', variant: 'error' }); return; }
+
+    // Filtrar items inválidos (cantidad 0) antes de guardar
+    const itemsValidos = items.filter((i) => i.cantidad > 0);
+    if (itemsValidos.length === 0) {
+      setToast({ visible: true, message: 'Agrega al menos un producto con cantidad mayor a 0', variant: 'error' });
+      return;
+    }
+
     setSaving(true);
     try {
       await ordenesCompraApi.crear({
@@ -101,7 +118,7 @@ export default function OrdenCompraFormScreen(): React.ReactElement {
         fecha_esperada: fechaEsperada || undefined,
         notas: notas || undefined,
         estado: 'borrador',
-        items: items.map((i) => ({
+        items: itemsValidos.map((i) => ({
           producto_id: i.producto_id,
           cantidad: i.cantidad,
           precio_unitario: i.precio_unitario,
@@ -128,9 +145,15 @@ export default function OrdenCompraFormScreen(): React.ReactElement {
   });
 
   return (
-    <KeyboardScreen>
-      <TopBar title="Nueva orden de compra" onBack={() => navigation.goBack()} />
-
+    <KeyboardScreen
+      header={
+        <TopBar
+          title="Nueva orden de compra"
+          onBack={() => navigation.goBack()}
+        />
+      }
+      contentContainerStyle={{ padding: 0 }}
+    >
       <View style={styles.content}>
         <Card variant="default" style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Proveedor</Text>
@@ -193,8 +216,10 @@ export default function OrdenCompraFormScreen(): React.ReactElement {
                           { backgroundColor: colors.bgSubtle, color: colors.textPrimary },
                         ]}
                         keyboardType="numeric"
-                        value={String(it.cantidad)}
-                        onChangeText={(t) => setCantidad(it.producto_id, parseInt(t) || 0)}
+                        value={it.cantidad === 0 ? '' : String(it.cantidad)}
+                        onChangeText={(t) => setCantidadTexto(it.producto_id, t)}
+                        placeholder="0"
+                        placeholderTextColor={colors.textMuted}
                       />
                     </View>
 
@@ -218,8 +243,9 @@ export default function OrdenCompraFormScreen(): React.ReactElement {
                 </View>
 
                 <Pressable
-                  onPress={() => setCantidad(it.producto_id, 0)}
+                  onPress={() => quitarItem(it.producto_id)}
                   style={styles.removeBtn}
+                  hitSlop={8}
                 >
                   <MaterialCommunityIcons name="close" size={16} color={colors.danger} />
                 </Pressable>
