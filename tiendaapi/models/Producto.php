@@ -21,7 +21,22 @@ if (!class_exists('Producto')) {
 
         public function find(int $id): ?array
         {
-            $producto = parent::find($id);
+            $nid = $this->nid();
+
+            $sql = "SELECT p.*, c.nombre AS categoria_nombre, pr.nombre AS proveedor_nombre
+                    FROM productos p
+                    LEFT JOIN categorias c ON c.id = p.categoria_id
+                    LEFT JOIN proveedores pr ON pr.id = p.proveedor_id
+                    WHERE p.id = :id";
+            $params = ['id' => $id];
+
+            if ($nid !== null) {
+                $sql .= " AND p.negocio_id = :nid";
+                $params['nid'] = $nid;
+            }
+            $sql .= " LIMIT 1";
+
+            $producto = $this->rawFirst($sql, $params);
             return $producto === null ? null : $this->incluirImagenes([$producto])[0];
         }
 
@@ -111,12 +126,10 @@ if (!class_exists('Producto')) {
             return $producto === null ? null : $this->incluirImagenes([$producto])[0];
         }
 
-               public function barcodeExists(string $codigo, ?int $excludeId = null): bool
+        public function barcodeExists(string $codigo, ?int $excludeId = null): bool
         {
             $nid = $this->nid();
 
-            // Solo verificar productos ACTIVOS.
-            // Si un producto está desactivado, se permite reutilizar su código.
             $sql = "SELECT COUNT(*) FROM {$this->table}
                     WHERE codigo_barras = :codigo AND activo = 1";
             $params = ['codigo' => $codigo];
@@ -133,7 +146,7 @@ if (!class_exists('Producto')) {
             return (int) $this->rawScalar($sql, $params) > 0;
         }
 
-                public function findInactivoByBarcode(string $codigo): ?array
+        public function findInactivoByBarcode(string $codigo): ?array
         {
             $nid = $this->nid();
 
