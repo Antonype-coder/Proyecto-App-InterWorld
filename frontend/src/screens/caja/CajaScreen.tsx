@@ -7,6 +7,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { radius, spacing, typography } from '@theme/index';
 import { useColors } from '@hooks/useColors';
 import { usePolling } from '@hooks/usePolling';
+import { usePermissions } from '@hooks/usePermissions';
 import { cajaApi, ventasApi } from '@api/index';
 import type { CajaSesion, CajaMovimiento, VentaResumen } from '@tipos/index';
 import { formatCurrency, formatDateTime } from '@utils/format';
@@ -74,6 +75,7 @@ function calcularDesdeVentas(
 export default function CajaScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
   const colors = useColors();
+  const perm = usePermissions();
 
   const [sesion, setSesion] = useState<CajaSesion | null>(null);
   const [movimientos, setMovimientos] = useState<CajaMovimiento[]>([]);
@@ -114,7 +116,6 @@ export default function CajaScreen(): React.ReactElement {
     [],
   );
 
-  // Cargar al enfocar
   useFocusEffect(
     useCallback(() => {
       setFocused(true);
@@ -123,7 +124,6 @@ export default function CajaScreen(): React.ReactElement {
     }, [cargar]),
   );
 
-  // Polling silencioso mientras la pantalla está enfocada
   usePolling(
     () => {
       void cargar(true);
@@ -220,33 +220,53 @@ export default function CajaScreen(): React.ReactElement {
         }
       >
         {sesion === null ? (
-          <Card variant="elevated" style={styles.emptyCard}>
-            <View
-              style={[styles.emptyIcon, { backgroundColor: colors.bgSubtle }]}
-            >
-              <MaterialCommunityIcons
-                name="cash-register"
-                size={32}
-                color={colors.textMuted}
-              />
-            </View>
-            <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
-              Caja cerrada
-            </Text>
-            <Text style={[styles.emptyDesc, { color: colors.textSecondary }]}>
-              Abre la caja para comenzar a registrar ventas de tu turno.
-            </Text>
-            <View style={{ marginTop: spacing.xl, width: '100%' }}>
-              <Button
-                label="Abrir caja"
-                icon="lock-open-outline"
-                onPress={() => navigation.navigate('AbrirCaja' as never)}
-                fullWidth
-                variant="primary"
-                size="lg"
-              />
-            </View>
-          </Card>
+          perm.puedeAbrirCaja ? (
+            <Card variant="elevated" style={styles.emptyCard}>
+              <View
+                style={[styles.emptyIcon, { backgroundColor: colors.bgSubtle }]}
+              >
+                <MaterialCommunityIcons
+                  name="cash-register"
+                  size={32}
+                  color={colors.textMuted}
+                />
+              </View>
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
+                Caja cerrada
+              </Text>
+              <Text style={[styles.emptyDesc, { color: colors.textSecondary }]}>
+                Abre la caja para comenzar a registrar ventas de tu turno.
+              </Text>
+              <View style={{ marginTop: spacing.xl, width: '100%' }}>
+                <Button
+                  label="Abrir caja"
+                  icon="lock-open-outline"
+                  onPress={() => navigation.navigate('AbrirCaja' as never)}
+                  fullWidth
+                  variant="primary"
+                  size="lg"
+                />
+              </View>
+            </Card>
+          ) : (
+            <Card variant="elevated" style={styles.emptyCard}>
+              <View
+                style={[styles.emptyIcon, { backgroundColor: colors.bgSubtle }]}
+              >
+                <MaterialCommunityIcons
+                  name="lock-outline"
+                  size={32}
+                  color={colors.textMuted}
+                />
+              </View>
+              <Text style={[styles.emptyTitle, { color: colors.textPrimary }]}>
+                Caja cerrada
+              </Text>
+              <Text style={[styles.emptyDesc, { color: colors.textSecondary }]}>
+                Pide a un administrador que abra la caja para empezar a vender.
+              </Text>
+            </Card>
+          )
         ) : (
           <>
             <Card variant="elevated" style={styles.heroCard}>
@@ -319,20 +339,22 @@ export default function CajaScreen(): React.ReactElement {
               />
             </View>
 
-            <View style={{ marginTop: spacing.md }}>
-              <Button
-                label="Cerrar caja"
-                icon="lock-outline"
-                variant="danger"
-                onPress={() =>
-                  navigation.navigate(
-                    'CerrarCaja' as never,
-                    { sesionId: sesion.id } as never,
-                  )
-                }
-                fullWidth
-              />
-            </View>
+            {perm.puedeCerrarCaja ? (
+              <View style={{ marginTop: spacing.md }}>
+                <Button
+                  label="Cerrar caja"
+                  icon="lock-outline"
+                  variant="danger"
+                  onPress={() =>
+                    navigation.navigate(
+                      'CerrarCaja' as never,
+                      { sesionId: sesion.id } as never,
+                    )
+                  }
+                  fullWidth
+                />
+              </View>
+            ) : null}
 
             <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>
               MOVIMIENTOS MANUALES (

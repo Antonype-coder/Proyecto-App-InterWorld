@@ -25,7 +25,7 @@ import { useSuccessPulse } from '@hooks/useSuccessPulse';
 import { useProductosStore } from '@store/productosStore';
 import { useCarritoStore } from '@store/carritoStore';
 import { useAuthStore } from '@store/authStore';
-import { clientesApi, promocionesApi } from '@api/index';
+import { clientesApi, promocionesApi, cajaApi } from '@api/index';
 import { useNetworkStatus } from '@hooks/useNetworkStatus';
 import BusinessLogo from '@components/domain/BusinessLogo';
 import {
@@ -109,12 +109,10 @@ export default function POSScreen(): React.ReactElement {
     variant: ToastVariant;
   }>({ visible: false, message: '', variant: 'info' });
 
-  // ⚡ Mapa de promociones por producto
   const [promosPorProducto, setPromosPorProducto] = useState<
     Map<number, Promocion[]>
   >(new Map());
 
-  // Altura dinámica del carrito
   const CART_HEADER_H = 56;
   const CART_ITEM_H = 96;
   const CART_TOTALS_H = 260;
@@ -175,7 +173,6 @@ export default function POSScreen(): React.ReactElement {
     }
   }, [isOnline, ventasPendientes.length, usuario?.id, sincronizarPendientes]);
 
-  // ⚡ Cargar todas las promociones vigentes y agruparlas por producto
   useEffect(() => {
     if (productos.length === 0) return;
     let cancel = false;
@@ -250,6 +247,7 @@ export default function POSScreen(): React.ReactElement {
     void cargar({ busqueda: '' });
   }, [cargar]);
 
+  // 🔥 Procesar producto escaneado (agregar al carrito)
   useEffect(() => {
     const productoEscaneado = route.params?.productoEscaneado;
     if (productoEscaneado) {
@@ -261,7 +259,8 @@ export default function POSScreen(): React.ReactElement {
       });
       navigation.setParams({ productoEscaneado: undefined });
     }
-  }, [route.params?.productoEscaneado, navigation, onAgregar]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route.params?.productoEscaneado]);
 
   useEffect(() => {
     if (tipoPago === 'credito') {
@@ -357,10 +356,19 @@ export default function POSScreen(): React.ReactElement {
     try {
       const descuentoTotal = descuento + descuentoPromociones();
 
+      let cajaSesionId: number | null = null;
+      try {
+        const estado = await cajaApi.estado();
+        cajaSesionId = (estado as any)?.sesion?.id ?? null;
+      } catch {
+        // Silencioso
+      }
+
       const pending = crearVentaPendiente(
         {
           tipo_pago: tipoPago,
           cliente_id: clienteId,
+          caja_sesion_id: cajaSesionId,
           descuento: descuentoTotal,
           metodo_pago: metodo,
           items: items.map((i) => ({

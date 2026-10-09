@@ -59,7 +59,12 @@ if (!class_exists('ProductoController')) {
 
         public function findByBarcode(Request $request): void
         {
-            $codigo = (string) $request->param('codigo');
+            // Acepta ?codigo=XXX (query) o /barcode/{codigo} (param URL)
+            $codigo = trim((string) (
+                $request->param('codigo')
+                ?? $request->getQuery('codigo')
+                ?? ''
+            ));
 
             if ($codigo === '') {
                 throw new BusinessException('Código de barras requerido.');
@@ -78,9 +83,6 @@ if (!class_exists('ProductoController')) {
             Response::success($this->productos->stockBajo(), 'Productos con stock bajo.');
         }
 
-        /**
-         * Estadísticas reales de ventas del producto (con descuentos aplicados).
-         */
         public function estadisticas(Request $request): void
         {
             $id = (int) $request->param('id');
@@ -120,10 +122,40 @@ if (!class_exists('ProductoController')) {
 
             $codigo = tienda_sanitize_string((string) $data['codigo_barras']);
 
+            // 1. Si hay uno ACTIVO con ese código → conflicto
             if ($this->productos->barcodeExists($codigo)) {
-                throw new ConflictException('Ya existe un producto con ese código de barras.');
+                throw new ConflictException('Ya existe un producto activo con ese código de barras.');
             }
 
+            // 2. Si hay uno INACTIVO → reactivarlo con los nuevos datos
+            $inactivo = $this->productos->findInactivoByBarcode($codigo);
+
+            if ($inactivo !== null) {
+                $imagenes = $this->validarImagenes(
+                    $data['imagenes'] ?? null,
+                    $data['imagen'] ?? null
+                );
+
+                $this->productos->updateWithImages((int) $inactivo['id'], [
+                    'nombre'        => tienda_sanitize_string((string) $data['nombre']),
+                    'descripcion'   => isset($data['descripcion']) ? tienda_sanitize_string((string) $data['descripcion']) : null,
+                    'categoria_id'  => isset($data['categoria_id']) && $data['categoria_id'] !== '' ? (int) $data['categoria_id'] : null,
+                    'proveedor_id'  => isset($data['proveedor_id']) && $data['proveedor_id'] !== '' ? (int) $data['proveedor_id'] : null,
+                    'precio_compra' => isset($data['precio_compra']) ? Money::toDb($data['precio_compra']) : '0.00',
+                    'precio_venta'  => Money::toDb($data['precio_venta']),
+                    'stock'         => isset($data['stock']) ? tienda_to_int($data['stock']) : 0,
+                    'stock_minimo'  => isset($data['stock_minimo']) ? tienda_to_int($data['stock_minimo']) : 5,
+                    'activo'        => 1,
+                ], $imagenes);
+
+                Response::success(
+                    $this->productos->find((int) $inactivo['id']),
+                    'Producto reactivado correctamente.'
+                );
+                return;
+            }
+
+            // 3. No existe → crear nuevo
             $imagenes = $this->validarImagenes(
                 $data['imagenes'] ?? null,
                 $data['imagen'] ?? null
@@ -296,6 +328,23 @@ if (!class_exists('ProductoController')) {
 
             $this->productos->update($id, ['activo' => 0]);
             Response::success(null, 'Producto desactivado correctamente.');
+        }
+
+        public function destroyPermanente(Request $request): void
+        {
+            $id = (int) $request->param('id');
+
+            if ($this->productos->find($id) === null) {
+                throw new NotFoundException('Producto no encontrado.');
+            }
+
+            $result = $this->productos->deletePermanente($id);
+
+            $msg = ($result['accion'] ?? '') === 'eliminado'
+                ? 'Producto eliminado permanentemente.'
+                : 'Producto desactivado (tenía ventas asociadas).';
+
+            Response::success($result, $msg);
         }
     }
 }

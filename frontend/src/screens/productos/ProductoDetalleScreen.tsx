@@ -72,15 +72,12 @@ export default function ProductoDetalleScreen(): React.ReactElement {
 
       setStats(s);
 
-      // Filtrar promos que aplican a este producto Y están vigentes por fecha
       const hoy = new Date();
       const aplicables = todasPromos.filter((promo) => {
-        // Fecha vigente
         const ini = new Date(promo.fecha_inicio);
         const fin = new Date(promo.fecha_fin);
         if (hoy < ini || hoy > fin) return false;
 
-        // Aplicación por tipo
         if (promo.aplica_a === 'global') return true;
         if (promo.aplica_a === 'producto') {
           return Number(promo.producto_id) === Number(p.id);
@@ -132,6 +129,37 @@ export default function ProductoDetalleScreen(): React.ReactElement {
     }
   };
 
+  const eliminarPermanente = async (): Promise<void> => {
+    const ok = await confirm({
+      title: 'Eliminar producto',
+      message:
+        'Esta acción borra el producto y sus imágenes permanentemente. No se puede deshacer.\n\nSi el producto tiene ventas asociadas, solo se desactivará.',
+      confirmLabel: 'Eliminar',
+      variant: 'danger',
+    });
+    if (!ok) return;
+
+    try {
+      const res = await productosApi.eliminarPermanente(productId);
+      await Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      );
+      showToast(
+        res.accion === 'eliminado'
+          ? 'Producto eliminado permanentemente.'
+          : 'Producto desactivado (tenía ventas asociadas).',
+        'success',
+      );
+      navigation.goBack();
+    } catch (e) {
+      await Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Error,
+      );
+      const msg = e instanceof Error ? e.message : 'Error al eliminar';
+      showToast(msg, 'error');
+    }
+  };
+
   if (loading) {
     return (
       <SafeAreaView
@@ -166,24 +194,22 @@ export default function ProductoDetalleScreen(): React.ReactElement {
   const precioVenta = parseFloat(producto.precio_venta);
   const precioCompra = parseFloat(producto.precio_compra);
 
-  // Elegir la promo que más descuenta
-  const analisis =
-    tienePromo
-      ? analizarPromocion(
-          promos.reduce((mejor, actual) => {
-            const dMejor = analizarPromocion(mejor, precioVenta, precioCompra)
-              .descuento;
-            const dActual = analizarPromocion(
-              actual,
-              precioVenta,
-              precioCompra,
-            ).descuento;
-            return dActual > dMejor ? actual : mejor;
-          }, promos[0]),
-          precioVenta,
-          precioCompra,
-        )
-      : null;
+  const analisis = tienePromo
+    ? analizarPromocion(
+        promos.reduce((mejor, actual) => {
+          const dMejor = analizarPromocion(mejor, precioVenta, precioCompra)
+            .descuento;
+          const dActual = analizarPromocion(
+            actual,
+            precioVenta,
+            precioCompra,
+          ).descuento;
+          return dActual > dMejor ? actual : mejor;
+        }, promos[0]),
+        precioVenta,
+        precioCompra,
+      )
+    : null;
 
   return (
     <SafeAreaView
@@ -308,7 +334,6 @@ export default function ProductoDetalleScreen(): React.ReactElement {
               </View>
             </View>
 
-            {/* Info de la promo */}
             <View
               style={[
                 styles.promoInfoBox,
@@ -343,7 +368,6 @@ export default function ProductoDetalleScreen(): React.ReactElement {
               </View>
             </View>
 
-            {/* Ejemplo con cantidad de referencia */}
             <Text style={[styles.promoEjemplo, { color: colors.textSecondary }]}>
               Si vendes{' '}
               <Text style={{ color: colors.textPrimary, fontWeight: '700' }}>
@@ -381,7 +405,6 @@ export default function ProductoDetalleScreen(): React.ReactElement {
               />
             </View>
 
-            {/* Comparativa de ganancia */}
             <View
               style={[
                 styles.gananciaBox,
@@ -521,7 +544,6 @@ export default function ProductoDetalleScreen(): React.ReactElement {
               </View>
             </View>
 
-            {/* Botón editar */}
             <Pressable
               onPress={() =>
                 navigation.navigate('Mas' as never, {
@@ -550,7 +572,6 @@ export default function ProductoDetalleScreen(): React.ReactElement {
               </Text>
             </Pressable>
 
-            {/* Otras promos */}
             {promos.length > 1 ? (
               <View style={styles.otherPromosWrap}>
                 <Text
@@ -742,16 +763,33 @@ export default function ProductoDetalleScreen(): React.ReactElement {
           ) : null}
         </Card>
 
-        {esAdmin && producto.activo === 1 ? (
-          <Button
-            label="Desactivar producto"
-            variant="danger"
-            icon="trash-can-outline"
-            onPress={() => {
-              void desactivar();
-            }}
-            fullWidth
-          />
+        {/* ACCIONES */}
+        {esAdmin ? (
+          <>
+            {producto.activo === 1 ? (
+              <Button
+                label="Desactivar producto"
+                variant="outline"
+                icon="eye-off-outline"
+                onPress={() => {
+                  void desactivar();
+                }}
+                fullWidth
+              />
+            ) : null}
+
+            <View style={{ height: spacing.md }} />
+
+            <Button
+              label="Eliminar permanentemente"
+              variant="danger"
+              icon="delete-forever-outline"
+              onPress={() => {
+                void eliminarPermanente();
+              }}
+              fullWidth
+            />
+          </>
         ) : null}
       </ScrollView>
     </SafeAreaView>

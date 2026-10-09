@@ -26,7 +26,6 @@ export default function RootNavigator(): React.ReactElement {
   const closePalette = useUIStore((s) => s.closePalette);
   const colors = useColors();
 
-  // null = cargando, true = mostrar welcome, false = mostrar app
   const [onboarding, setOnboarding] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -37,7 +36,6 @@ export default function RootNavigator(): React.ReactElement {
     void hydrateUI();
   }, [hydrateUI]);
 
-  // Al cambiar de usuario, revisamos si tiene onboarding pendiente
   useEffect(() => {
     let cancelled = false;
 
@@ -46,7 +44,6 @@ export default function RootNavigator(): React.ReactElement {
       return;
     }
 
-    // Mientras leemos storage, mostramos loading
     setOnboarding(null);
 
     (async () => {
@@ -67,8 +64,11 @@ export default function RootNavigator(): React.ReactElement {
     );
   }
 
+  // 🔥 CLAVE: 'key' fuerza remount de TODO el árbol al cambiar de usuario
+ const navKey = user ? `nav-${user.id}` : 'nav-anon';
+
   return (
-    <NavigationContainer>
+    <NavigationContainer key={navKey}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!user ? (
           <Stack.Screen name="Auth" component={AuthStack} />

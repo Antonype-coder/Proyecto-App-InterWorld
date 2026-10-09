@@ -1,4 +1,3 @@
-// src/screens/ventas/ProductoScannerScreen.tsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
@@ -42,7 +41,10 @@ const isValidBarcode = (value: string): boolean => {
 export default function ProductoScannerScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const origen: 'pos' | 'formulario' = route.params?.origen ?? 'formulario';
+
+  // 🔥 Leer origen de forma reactiva al recibir foco
+  const [origen, setOrigen] = useState<'pos' | 'formulario'>('formulario');
+
   const scannerLockRef = useRef(false);
 
   const [permission, requestPermission] = useCameraPermissions();
@@ -56,22 +58,20 @@ export default function ProductoScannerScreen(): React.ReactElement {
     setLoading(false);
   }, []);
 
+  // 🔥 Al recibir foco, leer SIEMPRE el origen actual
   useFocusEffect(
     useCallback(() => {
+      const nuevoOrigen = route.params?.origen;
+      if (nuevoOrigen === 'pos' || nuevoOrigen === 'formulario') {
+        setOrigen(nuevoOrigen);
+      }
       resetScannerState();
       setCameraError(null);
-    }, [resetScannerState]),
+    }, [route.params?.origen, resetScannerState]),
   );
 
   useEffect(() => {
-    console.log('[SCANNER] Estado permiso:', {
-      granted: permission?.granted,
-      canAskAgain: permission?.canAskAgain,
-      status: permission?.status,
-    });
-
     if (permission && !permission.granted && permission.canAskAgain) {
-      console.log('[SCANNER] Solicitando permiso de cámara...');
       void requestPermission();
     }
   }, [permission, requestPermission]);
@@ -86,24 +86,37 @@ export default function ProductoScannerScreen(): React.ReactElement {
   };
 
   const cerrar = (): void => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (origen === 'formulario' && navigation.canGoBack()) {
       navigation.goBack();
       return;
     }
-
     navigation.navigate(origen === 'formulario' ? 'Productos' : 'Vender');
   };
 
+  const irACrearProducto = (codigo: string): void => {
+    // Limpiar params del scanner para no re-disparar
+    navigation.setParams({ origen: undefined });
+    navigation.navigate('Productos', {
+      screen: 'ProductoForm',
+      params: { codigoEscaneado: codigo },
+    });
+  };
+
   const buscarProductoEscaneado = useCallback(
-    async (codigo: string): Promise<{ source: 'local' | FuenteCatalogoPublico; producto?: unknown } | null> => {
+    async (
+      codigo: string,
+    ): Promise<{
+      source: 'local' | FuenteCatalogoPublico;
+      producto?: unknown;
+    } | null> => {
       const normalized = normalizeBarcode(codigo);
 
       try {
         const producto = await productosApi.buscarPorCodigo(normalized);
         return { source: 'local', producto };
       } catch {
-        // Continue with the public catalogs when the local catalog has no match.
+        // Continuar con catálogos públicos
       }
 
       const publicResult = await buscarEnCatalogosPublicos(normalized);
@@ -119,21 +132,20 @@ export default function ProductoScannerScreen(): React.ReactElement {
       const normalized = normalizeBarcode(data);
 
       if (!normalized) {
-        console.warn('[SCANNER] Código vacío detectado');
-        Alert.alert('Código no detectado', 'No se pudo leer ningún valor desde la cámara.' );
+        Alert.alert(
+          'Código no detectado',
+          'No se pudo leer ningún valor desde la cámara.',
+        );
         return;
       }
 
-      console.log('[SCANNER] Código detectado:', normalized, 'Tipo:', type);
-
-      if (scannerLockRef.current || scanned || loading) {
-        console.log('[SCANNER] Escaneo bloqueado. Duplicado o en procesamiento');
-        return;
-      }
+      if (scannerLockRef.current || scanned || loading) return;
 
       if (!isValidBarcode(normalized)) {
-        console.warn('[SCANNER] Código inválido:', normalized);
-        Alert.alert('Código inválido', 'El valor escaneado no parece un código de barras válido.');
+        Alert.alert(
+          'Código inválido',
+          'El valor escaneado no parece un código de barras válido.',
+        );
         resetScannerState();
         return;
       }
@@ -147,8 +159,8 @@ export default function ProductoScannerScreen(): React.ReactElement {
           Haptics.NotificationFeedbackType.Success,
         );
 
+        // ────────── Modo FORMULARIO ──────────
         if (origen === 'formulario') {
-          console.log('[SCANNER] Redirigiendo a formulario con código:', normalized);
           navigation.navigate('Productos', {
             screen: 'ProductoForm',
             params: { codigoEscaneado: normalized },
@@ -156,26 +168,42 @@ export default function ProductoScannerScreen(): React.ReactElement {
           return;
         }
 
+        // ────────── Modo POS ──────────
         const resultado = await buscarProductoEscaneado(normalized);
 
+        // Caso 1: producto existe en el negocio → agregar al carrito
         if (resultado?.source === 'local' && resultado.producto) {
-          console.log('[SCANNER] Producto encontrado en backend, navegando al POS');
           navigation.navigate('Vender', {
             productoEscaneado: resultado.producto,
           });
           return;
         }
 
+        // Caso 2: no existe → ofrecer crearlo
         if (origen === 'pos') {
-          console.warn('[SCANNER] Producto no registrado para la venta:', normalized);
+          await Haptics.notificationAsync(
+            Haptics.NotificationFeedbackType.Warning,
+          );
+
           Alert.alert(
-            'Producto no disponible para la venta',
-            `El código ${normalized} no está registrado en el sistema y no se cargará en el carrito.`,
-            [{ text: 'Escanear otro', onPress: resetScannerState }],
+            'Producto no registrado',
+            `El código ${normalized} no está en tu catálogo.\n\n¿Quieres agregarlo ahora?`,
+            [
+              {
+                text: 'Escanear otro',
+                onPress: resetScannerState,
+                style: 'cancel',
+              },
+              {
+                text: 'Crear producto',
+                onPress: () => irACrearProducto(normalized),
+              },
+            ],
           );
           return;
         }
 
+        // Caso 3: catálogo público (solo en formulario)
         if (resultado && resultado.source !== 'local' && resultado.producto) {
           const productoInfo = resultado.producto as {
             code?: string | null;
@@ -187,8 +215,7 @@ export default function ProductoScannerScreen(): React.ReactElement {
             image_url?: string | null;
           };
 
-          const nombre =
-            productoInfo.product_name ?? 'Producto identificado';
+          const nombre = productoInfo.product_name ?? 'Producto identificado';
           const marca = productoInfo.brands ?? 'Sin marca';
           const categoria = productoInfo.categories ?? 'Sin categoría';
           const descripcion =
@@ -207,12 +234,6 @@ export default function ProductoScannerScreen(): React.ReactElement {
             .filter(Boolean)
             .join('\n');
 
-          console.log('[API] Producto encontrado en fuente pública:', {
-            source: resultado.source,
-            nombre,
-            marca,
-            categoria,
-          });
           await Haptics.notificationAsync(
             Haptics.NotificationFeedbackType.Warning,
           );
@@ -228,6 +249,7 @@ export default function ProductoScannerScreen(): React.ReactElement {
           return;
         }
 
+        // Caso 4: nada encontrado
         await Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Warning,
         );
@@ -244,17 +266,28 @@ export default function ProductoScannerScreen(): React.ReactElement {
         await Haptics.notificationAsync(
           Haptics.NotificationFeedbackType.Error,
         );
-        const msg = error instanceof Error ? error.message : 'Error inesperado al buscar el producto';
-        console.error('[SCANNER] Error al procesar código:', error);
-        Alert.alert('Error de conexión', msg, [{ text: 'OK', onPress: cerrar }]);
+        const msg =
+          error instanceof Error
+            ? error.message
+            : 'Error inesperado al buscar el producto';
+        Alert.alert('Error de conexión', msg, [
+          { text: 'OK', onPress: cerrar },
+        ]);
       } finally {
         setLoading(false);
       }
     },
-    [buscarProductoEscaneado, cerrar, loading, navigation, origen, resetScannerState, scanned],
+    [
+      buscarProductoEscaneado,
+      cerrar,
+      loading,
+      navigation,
+      origen,
+      resetScannerState,
+      scanned,
+    ],
   );
 
-  // Cargando permisos
   if (!permission) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
@@ -266,7 +299,6 @@ export default function ProductoScannerScreen(): React.ReactElement {
     );
   }
 
-  // Permiso denegado
   if (!permission.granted) {
     return (
       <SafeAreaView style={styles.safe} edges={['top']}>
@@ -304,18 +336,13 @@ export default function ProductoScannerScreen(): React.ReactElement {
     );
   }
 
-  // ══════════════════════════════════════════════════════════
-  // CÁMARA ACTIVA — Todo se posiciona ABSOLUTO sobre la cámara
-  // ══════════════════════════════════════════════════════════
   return (
     <View style={styles.root}>
-      {/* Capa base: cámara a pantalla completa */}
       <CameraView
         style={StyleSheet.absoluteFill}
         facing="back"
         onBarcodeScanned={scanned ? undefined : handleBarCodeScanned}
         onMountError={(error) => {
-          console.error('Camera error:', error);
           setCameraError(error?.message || 'Error al iniciar cámara');
         }}
         barcodeScannerSettings={{
@@ -323,7 +350,6 @@ export default function ProductoScannerScreen(): React.ReactElement {
         }}
       />
 
-      {/* Capa 1: Header en la parte de arriba */}
       <SafeAreaView
         style={styles.headerOverlay}
         edges={['top']}
@@ -337,18 +363,20 @@ export default function ProductoScannerScreen(): React.ReactElement {
             accessibilityRole="button"
             accessibilityLabel="Volver"
           >
-            <MaterialCommunityIcons
-              name="arrow-left"
-              size={24}
-              color="#FFF"
-            />
+            <MaterialCommunityIcons name="arrow-left" size={24} color="#FFF" />
           </Pressable>
-          <Text style={styles.headerTitleGlass}>Escanear código</Text>
+
+          <View style={styles.headerTitleWrap}>
+            <Text style={styles.headerTitleGlass}>Escanear código</Text>
+            <Text style={styles.headerModeGlass}>
+              {origen === 'pos' ? 'Modo Venta' : 'Modo Producto'}
+            </Text>
+          </View>
+
           <View style={{ width: 44 }} />
         </View>
       </SafeAreaView>
 
-      {/* Capa 2: Marco de escaneo centrado */}
       <View style={styles.middleOverlay} pointerEvents="none">
         <View style={styles.scanFrame}>
           <View style={[styles.corner, styles.cornerTL]} />
@@ -376,7 +404,6 @@ export default function ProductoScannerScreen(): React.ReactElement {
         )}
       </View>
 
-      {/* Capa 3: Footer en la parte de abajo */}
       <SafeAreaView
         style={styles.footerOverlay}
         edges={['bottom']}
@@ -390,8 +417,8 @@ export default function ProductoScannerScreen(): React.ReactElement {
           />
           <Text style={styles.footerText}>
             {origen === 'formulario'
-              ? 'El código se colocará en el formulario.'
-              : 'El producto se agregará al carrito.'}
+              ? 'El código se colocará en el formulario del producto.'
+              : 'El producto se agregará automáticamente al carrito.'}
           </Text>
         </View>
       </SafeAreaView>
@@ -400,14 +427,9 @@ export default function ProductoScannerScreen(): React.ReactElement {
 }
 
 const styles = StyleSheet.create({
-  // Contenedor raíz
-  root: {
-    flex: 1,
-    backgroundColor: '#000',
-  },
+  root: { flex: 1, backgroundColor: '#000' },
   safe: { flex: 1, backgroundColor: colors.bg },
 
-  // ─── Header normal (permiso denegado) ───
   headerNormal: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -426,7 +448,6 @@ const styles = StyleSheet.create({
   },
   headerTitleNormal: { ...typography.h3, color: colors.textPrimary },
 
-  // ─── Header flotante sobre cámara ───
   headerOverlay: {
     position: 'absolute',
     top: 0,
@@ -442,6 +463,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
   },
+  headerTitleWrap: { flex: 1, alignItems: 'center' },
   backBtnGlass: {
     width: 44,
     height: 44,
@@ -459,8 +481,16 @@ const styles = StyleSheet.create({
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
   },
+  headerModeGlass: {
+    color: '#FFF',
+    fontSize: 11,
+    opacity: 0.85,
+    marginTop: 2,
+    textShadowColor: 'rgba(0, 0, 0, 0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
 
-  // ─── Marco de escaneo (centro) ───
   middleOverlay: {
     position: 'absolute',
     top: 0,
@@ -539,7 +569,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
 
-  // ─── Footer flotante ───
   footerOverlay: {
     position: 'absolute',
     bottom: 0,
@@ -565,7 +594,6 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 
-  // ─── Centro (para loading y permisos) ───
   center: {
     flexGrow: 1,
     alignItems: 'center',

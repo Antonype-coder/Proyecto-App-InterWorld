@@ -90,13 +90,45 @@ export default function ReportesScreen(): React.ReactElement {
       setCartera(c);
       setProductos(prodsRes.items);
 
-      if (config?.negocio) {
+      // 🔥 Leer configuración desde AMBOS grupos (general y negocio)
+      if (config) {
+        const cfg = config as any;
+        const cfgNegocio = cfg.negocio ?? {};
+        const cfgGeneral = cfg.general ?? {};
+
+        const nombre =
+          cfgGeneral.negocio_nombre ??
+          cfgNegocio.negocio_nombre ??
+          cfgGeneral.nombre ??
+          cfgNegocio.nombre ??
+          'Mi Tienda';
+
+        const nit = cfgGeneral.negocio_nit ?? cfgNegocio.negocio_nit ?? '';
+        const telefono =
+          cfgGeneral.negocio_telefono ?? cfgNegocio.negocio_telefono ?? '';
+        const direccion =
+          cfgGeneral.negocio_direccion ?? cfgNegocio.negocio_direccion ?? '';
+        const logo =
+          cfgGeneral.logo_url ??
+          cfgNegocio.logo_url ??
+          cfgGeneral.negocio_logo ??
+          cfgNegocio.negocio_logo ??
+          '';
+
+        console.log('[REPORTES] Config cargada:', {
+          nombre,
+          nit,
+          telefono,
+          direccion,
+          logo,
+        });
+
         setNegocio({
-          nombre: String(config.negocio.negocio_nombre ?? 'Mi Tienda'),
-          nit: String(config.negocio.negocio_nit ?? ''),
-          telefono: String(config.negocio.negocio_telefono ?? ''),
-          direccion: String(config.negocio.negocio_direccion ?? ''),
-          logo: String(config.negocio.logo_url ?? ''),
+          nombre: String(nombre),
+          nit: String(nit),
+          telefono: String(telefono),
+          direccion: String(direccion),
+          logo: String(logo),
         });
       }
     } catch (e) {

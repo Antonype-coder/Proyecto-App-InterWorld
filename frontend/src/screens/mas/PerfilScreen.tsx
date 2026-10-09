@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { View, Text, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 
-import { colors, spacing, typography } from '@theme/index';
+import { spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
+import type { AppColors } from '@theme/colors';
 import { useAuthStore } from '@store/authStore';
 import { authApi, usuariosApi } from '@api/index';
 import TopBar from '@components/layout/TopBar';
@@ -16,6 +18,9 @@ import type { ToastVariant } from '@tipos/index';
 
 export default function PerfilScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const user = useAuthStore((s) => s.user);
   const updateUser = useAuthStore((s) => s.updateUser);
 
@@ -119,12 +124,16 @@ export default function PerfilScreen(): React.ReactElement {
 
   return (
     <KeyboardScreen
-      header={<TopBar title="Mi perfil" onBack={() => navigation.goBack()} />}
+      header={
+        <TopBar title="Mi perfil" onBack={() => navigation.goBack()} />
+      }
       contentContainerStyle={{ padding: 0 }}
     >
       <View style={styles.content}>
         <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Información personal</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+            Información personal
+          </Text>
           <Input
             label="Nombre completo"
             icon="account-outline"
@@ -139,6 +148,7 @@ export default function PerfilScreen(): React.ReactElement {
             value={email}
             onChangeText={setEmail}
           />
+          <View style={{ height: spacing.md }} />
           <Button
             label="Guardar cambios"
             onPress={guardarPerfil}
@@ -150,7 +160,9 @@ export default function PerfilScreen(): React.ReactElement {
         </Card>
 
         <Card variant="default" style={styles.section}>
-          <Text style={styles.sectionTitle}>Cambiar contraseña</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+            Cambiar contraseña
+          </Text>
           <Input
             label="Nueva contraseña"
             icon="lock-outline"
@@ -167,6 +179,7 @@ export default function PerfilScreen(): React.ReactElement {
             value={confirmPassword}
             onChangeText={setConfirmPassword}
           />
+          <View style={{ height: spacing.md }} />
           <Button
             label="Actualizar contraseña"
             onPress={guardarPassword}
@@ -188,12 +201,12 @@ export default function PerfilScreen(): React.ReactElement {
   );
 }
 
-const styles = StyleSheet.create({
-  content: { padding: spacing.lg, paddingBottom: spacing.giant },
-  section: { marginBottom: spacing.md },
-  sectionTitle: {
-    ...typography.h3,
-    color: colors.textPrimary,
-    marginBottom: spacing.lg,
-  },
-});
+const makeStyles = (colors: AppColors) =>
+  StyleSheet.create({
+    content: { padding: spacing.lg, paddingBottom: spacing.giant },
+    section: { marginBottom: spacing.md },
+    sectionTitle: {
+      ...typography.h3,
+      marginBottom: spacing.lg,
+    },
+  });

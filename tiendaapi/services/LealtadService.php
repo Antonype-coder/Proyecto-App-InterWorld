@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../config/database.php';
+require_once __DIR__ . '/../core/Auth.php';
 require_once __DIR__ . '/../core/Exceptions/BusinessException.php';
 require_once __DIR__ . '/../core/Exceptions/NotFoundException.php';
 
@@ -10,22 +11,23 @@ if (!class_exists('LealtadService')) {
     {
         private PDO $db;
 
-        // Reglas del programa (configurables)
-        private const PUNTOS_POR_PESO = 1;       // 1 punto por cada $1.000
+        private const PUNTOS_POR_PESO = 1;
         private const PESO_POR_PUNTO = 1000;
-        private const PUNTOS_BRONZE = 0;         // >= 0 puntos
-        private const PUNTOS_SILVER = 500;       // >= 500 puntos
-        private const PUNTOS_GOLD = 2000;        // >= 2000 puntos
-        private const VALOR_PUNTO_EN_CANJE = 100; // 1 punto = $100 al canjear
+        private const PUNTOS_BRONZE = 0;
+        private const PUNTOS_SILVER = 500;
+        private const PUNTOS_GOLD = 2000;
+        private const VALOR_PUNTO_EN_CANJE = 100;
 
         public function __construct()
         {
             $this->db = Database::getConnection();
         }
 
-        /**
-         * Otorga puntos por una compra.
-         */
+        private function nid(): ?int
+        {
+            return class_exists('Auth') ? Auth::negocioId() : null;
+        }
+
         public function otorgarPorVenta(int $clienteId, float $montoTotal, int $ventaId, int $usuarioId): int
         {
             if ($clienteId <= 0 || $montoTotal <= 0) return 0;
@@ -36,16 +38,23 @@ if (!class_exists('LealtadService')) {
             return $this->registrar($clienteId, $puntos, 'ganado', $ventaId, $usuarioId, "Compra #{$ventaId}");
         }
 
-        /**
-         * Canjea puntos del cliente (los descuenta y devuelve el valor en pesos).
-         */
         public function canjear(int $clienteId, int $puntos, int $usuarioId): array
         {
             if ($puntos <= 0) throw new BusinessException('Cantidad de puntos inválida.');
 
-            return $this->transaction(function () use ($clienteId, $puntos, $usuarioId) {
-                $stmt = $this->db->prepare("SELECT puntos_actuales FROM clientes WHERE id = :id FOR UPDATE");
-                $stmt->execute(['id' => $clienteId]);
+            $nid = $this->nid();
+
+            return $this->transaction(function () use ($clienteId, $puntos, $usuarioId, $nid) {
+                $sql = "SELECT puntos_actuales FROM clientes WHERE id = :id";
+                $params = ['id' => $clienteId];
+                if ($nid !== null) {
+                    $sql .= " AND negocio_id = :nid";
+                    $params['nid'] = $nid;
+                }
+                $sql .= " FOR UPDATE";
+
+                $stmt = $this->db->prepare($sql);
+                $stmt->execute($params);
                 $cliente = $stmt->fetch();
                 if ($cliente === false) throw new NotFoundException('Cliente no encontrado.');
 
@@ -64,43 +73,50 @@ if (!class_exists('LealtadService')) {
             });
         }
 
-        /**
-         * Ajuste manual (admin).
-         */
         public function ajustar(int $clienteId, int $puntos, string $motivo, int $usuarioId): int
         {
             if ($puntos === 0) throw new BusinessException('Los puntos no pueden ser cero.');
             return $this->registrar($clienteId, $puntos, 'ajuste', null, $usuarioId, $motivo);
         }
 
-        /**
-         * Historial de puntos de un cliente.
-         */
         public function historial(int $clienteId, int $limit = 50): array
         {
-            $stmt = $this->db->prepare(
-                "SELECT ph.*, u.nombre AS usuario_nombre
-                 FROM puntos_historial ph
-                 LEFT JOIN usuarios u ON u.id = ph.usuario_id
-                 WHERE ph.cliente_id = :id
-                 ORDER BY ph.id DESC LIMIT :limit"
-            );
-            $stmt->bindValue(':id', $clienteId, PDO::PARAM_INT);
-            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-            $stmt->execute();
+            $nid = $this->nid();
+
+            $sql = "SELECT ph.*, u.nombre AS usuario_nombre
+                    FROM puntos_historial ph
+                    LEFT JOIN usuarios u ON u.id = ph.usuario_id
+                    INNER JOIN clientes c ON c.id = ph.cliente_id
+                    WHERE ph.cliente_id = :id";
+            $params = ['id' => $clienteId];
+
+            if ($nid !== null) {
+                $sql .= " AND c.negocio_id = :nid";
+                $params['nid'] = $nid;
+            }
+            $sql .= " ORDER BY ph.id DESC LIMIT " . (int)$limit;
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
             return $stmt->fetchAll() ?: [];
         }
 
-        /**
-         * Info completa del programa para un cliente.
-         */
         public function infoCliente(int $clienteId): array
         {
-            $stmt = $this->db->prepare(
-                "SELECT id, nombre, puntos_actuales, nivel_lealtad, total_compras
-                 FROM clientes WHERE id = :id LIMIT 1"
-            );
-            $stmt->execute(['id' => $clienteId]);
+            $nid = $this->nid();
+
+            $sql = "SELECT id, nombre, puntos_actuales, nivel_lealtad, total_compras
+                    FROM clientes WHERE id = :id";
+            $params = ['id' => $clienteId];
+
+            if ($nid !== null) {
+                $sql .= " AND negocio_id = :nid";
+                $params['nid'] = $nid;
+            }
+            $sql .= " LIMIT 1";
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
             $cliente = $stmt->fetch();
             if ($cliente === false) throw new NotFoundException('Cliente no encontrado.');
 
@@ -125,25 +141,25 @@ if (!class_exists('LealtadService')) {
             ];
         }
 
-        /**
-         * Lista todos los clientes ordenados por puntos.
-         */
         public function ranking(int $limit = 50): array
         {
-            $stmt = $this->db->prepare(
-                "SELECT id, nombre, documento, puntos_actuales, nivel_lealtad, total_compras
-                 FROM clientes
-                 WHERE activo = 1 AND puntos_actuales > 0
-                 ORDER BY puntos_actuales DESC LIMIT :limit"
-            );
-            $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-            $stmt->execute();
+            $nid = $this->nid();
+
+            $sql = "SELECT id, nombre, documento, puntos_actuales, nivel_lealtad, total_compras
+                    FROM clientes
+                    WHERE activo = 1 AND puntos_actuales > 0";
+            $params = [];
+
+            if ($nid !== null) {
+                $sql .= " AND negocio_id = :nid";
+                $params['nid'] = $nid;
+            }
+            $sql .= " ORDER BY puntos_actuales DESC LIMIT " . (int)$limit;
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
             return $stmt->fetchAll() ?: [];
         }
-
-        // ================================================================
-        // PRIVADOS
-        // ================================================================
 
         private function registrar(
             int $clienteId,
@@ -153,25 +169,36 @@ if (!class_exists('LealtadService')) {
             ?int $usuarioId,
             ?string $motivo
         ): int {
-            return $this->transaction(function () use ($clienteId, $puntos, $tipo, $ventaId, $usuarioId, $motivo) {
-                $stmt = $this->db->prepare(
-                    "SELECT puntos_actuales FROM clientes WHERE id = :id FOR UPDATE"
-                );
-                $stmt->execute(['id' => $clienteId]);
+            $nid = $this->nid();
+
+            return $this->transaction(function () use ($clienteId, $puntos, $tipo, $ventaId, $usuarioId, $motivo, $nid) {
+                $sql = "SELECT puntos_actuales FROM clientes WHERE id = :id";
+                $params = ['id' => $clienteId];
+                if ($nid !== null) {
+                    $sql .= " AND negocio_id = :nid";
+                    $params['nid'] = $nid;
+                }
+                $sql .= " FOR UPDATE";
+
+                $stmt = $this->db->prepare($sql);
+                $stmt->execute($params);
                 $row = $stmt->fetch();
                 if ($row === false) throw new NotFoundException('Cliente no encontrado.');
 
                 $antes = (int)$row['puntos_actuales'];
                 $despues = max(0, $antes + $puntos);
 
-                // Actualizar cliente
                 $nivel = $this->calcularNivel($despues);
-                $upd = $this->db->prepare(
-                    "UPDATE clientes SET puntos_actuales = :p, nivel_lealtad = :n WHERE id = :id"
-                );
-                $upd->execute(['p' => $despues, 'n' => $nivel, 'id' => $clienteId]);
 
-                // Registrar historial
+                $updSql = "UPDATE clientes SET puntos_actuales = :p, nivel_lealtad = :n WHERE id = :id";
+                $updParams = ['p' => $despues, 'n' => $nivel, 'id' => $clienteId];
+                if ($nid !== null) {
+                    $updSql .= " AND negocio_id = :nid";
+                    $updParams['nid'] = $nid;
+                }
+                $upd = $this->db->prepare($updSql);
+                $upd->execute($updParams);
+
                 $ins = $this->db->prepare(
                     "INSERT INTO puntos_historial
                      (cliente_id, usuario_id, venta_id, tipo, puntos, saldo_anterior, saldo_nuevo, motivo)

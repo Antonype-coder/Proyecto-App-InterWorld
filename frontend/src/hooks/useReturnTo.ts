@@ -57,6 +57,32 @@ function screenExistsInTab(tabNav: any, tabName: string, screenName: string): bo
   return routeNames.includes(screenName);
 }
 
+/**
+ * ¿El usuario está saliendo de su tab actual (cruzando tabs)?
+ * Devuelve el tab destino o null si es la misma tab.
+ */
+function getReturnToIfCrossTab(
+  currentTabName: string,
+  targetTabName: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  nestedRoute: any,
+): ReturnTo | null {
+  // Si vamos a la MISMA tab, no hay returnTo que valga.
+  if (currentTabName === targetTabName) return null;
+
+  const isRootOfTab = !nestedRoute || nestedRoute.name === currentTabName;
+
+  if (isRootOfTab) {
+    return { tab: currentTabName, screen: '', params: undefined };
+  }
+
+  return {
+    tab: currentTabName,
+    screen: nestedRoute.name,
+    params: nestedRoute.params,
+  };
+}
+
 export function useReturnTo() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const navigation = useNavigation<any>();
@@ -73,16 +99,20 @@ export function useReturnTo() {
       const currentTabRoute = tabState.routes[tabState.index];
       const nestedIndex = currentTabRoute?.state?.index ?? 0;
       const nestedRoute = currentTabRoute?.state?.routes?.[nestedIndex];
-      const isRootOfTab =
-        !nestedRoute || nestedRoute.name === currentTabRoute.name;
 
-      const returnTo: ReturnTo = isRootOfTab
-        ? { tab: currentTabRoute.name, screen: '', params: undefined }
-        : {
-            tab: currentTabRoute.name,
-            screen: nestedRoute.name,
-            params: nestedRoute.params,
-          };
+      // Solo guardamos returnTo cuando cruzamos tabs.
+      // Si estamos en la misma tab, no hace falta: el back normal funciona.
+      const returnTo = getReturnToIfCrossTab(
+        currentTabRoute.name,
+        tab,
+        nestedRoute,
+      );
+
+      if (returnTo === null) {
+        // Misma tab: navegar sin returnTo.
+        tabNav.navigate(tab, { screen, params });
+        return;
+      }
 
       tabNav.navigate(tab, {
         screen,
@@ -100,15 +130,23 @@ export function useSmartBack() {
   return useCallback(() => {
     const tabNav = findTabNavigator(navigation);
     const tabState = tabNav.getState();
+
+    const currentTabRoute = tabState?.routes?.[tabState.index];
+    const nestedIndex = currentTabRoute?.state?.index ?? 0;
+    const hasNestedHistory = nestedIndex > 0;
+
+    // 🔥 REGLA DE ORO:
+    // Si hay historial DENTRO de la tab actual, usa goBack().
+    // Solo usa returnTo cuando estamos en la raíz de la tab.
+    if (hasNestedHistory && navigation.canGoBack()) {
+      navigation.goBack();
+      return;
+    }
+
+    // Estamos en la raíz de la tab → revisar returnTo para volver a la tab origen.
     const returnTo = findReturnToInCurrentTab(tabState);
 
     if (returnTo?.tab) {
-      try {
-        navigation.popToTop();
-      } catch {
-        // ignore
-      }
-
       const canUseScreen =
         !!returnTo.screen &&
         screenExistsInTab(tabNav, returnTo.tab, returnTo.screen);
@@ -124,6 +162,7 @@ export function useSmartBack() {
       return;
     }
 
+    // Sin returnTo: intentar goBack normal.
     if (navigation.canGoBack()) {
       navigation.goBack();
     }

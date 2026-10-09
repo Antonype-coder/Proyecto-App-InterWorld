@@ -26,7 +26,6 @@ import RichEmptyState from '@components/ui/RichEmptyState';
 import SkeletonProducto from '@components/ui/SkeletonProducto';
 import ErrorState from '@components/feedback/ErrorState';
 import FAB from '@components/ui/FAB';
-import { getHiddenCatalogIds, hideCatalogId } from '@utils/hiddenCatalogItems';
 
 export default function ProveedoresListScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
@@ -49,11 +48,9 @@ export default function ProveedoresListScreen(): React.ReactElement {
   const cargar = useCallback(async (): Promise<void> => {
     setError(null);
     try {
-      const [data, hiddenIds] = await Promise.all([
-        proveedoresApi.listar(),
-        getHiddenCatalogIds('suppliers'),
-      ]);
-      setProveedores(data.filter((p) => !hiddenIds.has(p.id)));
+      // Sin filtros: trae TODOS los proveedores del negocio
+      const data = await proveedoresApi.listar(1);
+      setProveedores(Array.isArray(data) ? data : []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Error al cargar');
     } finally {
@@ -71,12 +68,12 @@ export default function ProveedoresListScreen(): React.ReactElement {
 
   const proveedoresFiltrados = proveedores
     .filter((p) => {
-      const texto = `${p.nombre} ${p.contacto ?? ''} ${p.telefono ?? ''} ${
-        p.email ?? ''
-      }`.toLowerCase();
-      const coincideBusqueda = texto.includes(debouncedBusqueda.toLowerCase());
-      const coincideEstado = mostrarInactivos || p.activo === 1;
-      return coincideBusqueda && coincideEstado;
+      if (debouncedBusqueda.trim() !== '') {
+        const texto = `${p.nombre} ${p.contacto ?? ''} ${p.telefono ?? ''} ${p.email ?? ''}`.toLowerCase();
+        if (!texto.includes(debouncedBusqueda.toLowerCase())) return false;
+      }
+      if (!mostrarInactivos && p.activo !== 1) return false;
+      return true;
     })
     .sort((a, b) => {
       const compare = a.nombre.localeCompare(b.nombre, 'es', {
@@ -87,9 +84,9 @@ export default function ProveedoresListScreen(): React.ReactElement {
 
   const eliminarProveedor = async (proveedor: Proveedor): Promise<void> => {
     const ok = await confirm({
-      title: 'Borrar proveedor definitivamente',
-      message: `Se eliminará "${proveedor.nombre}" y no se podrá recuperar.`,
-      confirmLabel: 'Borrar',
+      title: 'Desactivar proveedor',
+      message: `Se desactivará "${proveedor.nombre}". Podrás reactivarlo cuando quieras.`,
+      confirmLabel: 'Desactivar',
       variant: 'danger',
     });
     if (!ok) return;
@@ -97,14 +94,11 @@ export default function ProveedoresListScreen(): React.ReactElement {
     setEliminandoId(proveedor.id);
     try {
       await proveedoresApi.eliminar(proveedor.id);
-      await hideCatalogId('suppliers', proveedor.id);
-      setProveedores((actuales) =>
-        actuales.filter((item) => item.id !== proveedor.id),
-      );
-      showToast('Proveedor eliminado.', 'success');
+      await cargar();
+      showToast('Proveedor desactivado.', 'success');
     } catch (e) {
       const msg =
-        e instanceof Error ? e.message : 'No se pudo borrar el proveedor';
+        e instanceof Error ? e.message : 'No se pudo desactivar el proveedor';
       showToast(msg, 'error');
     } finally {
       setEliminandoId(null);
@@ -118,11 +112,7 @@ export default function ProveedoresListScreen(): React.ReactElement {
     setActualizandoId(proveedor.id);
     try {
       await proveedoresApi.actualizar(proveedor.id, { activo });
-      setProveedores((actuales) =>
-        actuales.map((item) =>
-          item.id === proveedor.id ? { ...item, activo } : item,
-        ),
-      );
+      await cargar();
     } catch (e) {
       const msg =
         e instanceof Error ? e.message : 'No se pudo cambiar el estado';
@@ -141,9 +131,7 @@ export default function ProveedoresListScreen(): React.ReactElement {
     >
       <TopBar
         title="Proveedores"
-        subtitle={`${proveedoresFiltrados.length} ${
-          proveedoresFiltrados.length === 1 ? 'proveedor' : 'proveedores'
-        }`}
+        subtitle={`${proveedoresFiltrados.length} de ${proveedores.length}`}
         onBack={() => navigation.goBack()}
       />
 
@@ -168,6 +156,15 @@ export default function ProveedoresListScreen(): React.ReactElement {
             autoCapitalize="none"
             autoCorrect={false}
           />
+          {busqueda.length > 0 ? (
+            <Pressable onPress={() => setBusqueda('')} hitSlop={8}>
+              <MaterialCommunityIcons
+                name="close-circle"
+                size={18}
+                color={colors.textMuted}
+              />
+            </Pressable>
+          ) : null}
         </View>
       </View>
 
@@ -176,16 +173,34 @@ export default function ProveedoresListScreen(): React.ReactElement {
           onPress={() => setMostrarInactivos((prev) => !prev)}
           style={[
             styles.toggleChip,
-            { backgroundColor: colors.surface, borderColor: colors.border },
+            {
+              backgroundColor: mostrarInactivos
+                ? colors.primary
+                : colors.surface,
+              borderColor: mostrarInactivos
+                ? colors.primary
+                : colors.border,
+            },
           ]}
         >
-          <Switch
-            value={mostrarInactivos}
-            onValueChange={setMostrarInactivos}
-            trackColor={{ true: colors.primary, false: colors.border }}
+          <MaterialCommunityIcons
+            name={mostrarInactivos ? 'eye' : 'eye-off'}
+            size={16}
+            color={
+              mostrarInactivos ? colors.textInverse : colors.textPrimary
+            }
           />
-          <Text style={[styles.toggleText, { color: colors.textPrimary }]}>
-            Mostrar inactivos
+          <Text
+            style={[
+              styles.toggleText,
+              {
+                color: mostrarInactivos
+                  ? colors.textInverse
+                  : colors.textPrimary,
+              },
+            ]}
+          >
+            {mostrarInactivos ? 'Viendo todos' : 'Solo activos'}
           </Text>
         </Pressable>
         <Pressable
@@ -205,6 +220,30 @@ export default function ProveedoresListScreen(): React.ReactElement {
           </Text>
         </Pressable>
       </View>
+
+      {hayFiltro && proveedoresFiltrados.length !== proveedores.length ? (
+        <Pressable
+          onPress={() => {
+            setBusqueda('');
+            setMostrarInactivos(true);
+            setOrdenAsc(true);
+          }}
+          style={[
+            styles.clearFilter,
+            { backgroundColor: colors.warningSubtle },
+          ]}
+        >
+          <MaterialCommunityIcons
+            name="filter-remove-outline"
+            size={14}
+            color={colors.warning}
+          />
+          <Text style={[styles.clearFilterText, { color: colors.warning }]}>
+            Hay {proveedores.length - proveedoresFiltrados.length} oculto(s).
+            Toca para mostrar todos.
+          </Text>
+        </Pressable>
+      ) : null}
 
       {loading && proveedores.length === 0 ? (
         <View>
@@ -226,7 +265,7 @@ export default function ProveedoresListScreen(): React.ReactElement {
           description={
             busqueda
               ? 'Prueba con otro término.'
-              : 'Agrega tus proveedores para asociarlos a productos y compras.'
+              : 'Registra proveedores para tus compras.'
           }
           actionLabel={!hayFiltro ? 'Agregar proveedor' : undefined}
           onAction={
@@ -239,7 +278,8 @@ export default function ProveedoresListScreen(): React.ReactElement {
             hayFiltro
               ? () => {
                   setBusqueda('');
-                  setMostrarInactivos(false);
+                  setMostrarInactivos(true);
+                  setOrdenAsc(true);
                 }
               : undefined
           }
@@ -290,13 +330,13 @@ export default function ProveedoresListScreen(): React.ReactElement {
                   <View
                     style={[
                       styles.iconWrap,
-                      { backgroundColor: colors.primarySubtle },
+                      { backgroundColor: colors.accentSubtle },
                     ]}
                   >
                     <MaterialCommunityIcons
                       name="truck-outline"
                       size={20}
-                      color={colors.primary}
+                      color={colors.accent}
                     />
                   </View>
                   <View style={styles.rowBody}>
@@ -309,12 +349,9 @@ export default function ProveedoresListScreen(): React.ReactElement {
                       style={[styles.rowSubtitle, { color: colors.textMuted }]}
                       numberOfLines={2}
                     >
-                      {item.activo === 1
-                        ? 'Activo'
-                        : 'Inactivo · Sin trato comercial actual'}
-                      {item.contacto || item.telefono || item.email
-                        ? ` · ${item.contacto || item.telefono || item.email}`
-                        : ''}
+                      {item.activo === 1 ? 'Activo' : 'Inactivo'}
+                      {item.contacto ? ` · ${item.contacto}` : ''}
+                      {item.telefono ? ` · ${item.telefono}` : ''}
                     </Text>
                   </View>
                   <MaterialCommunityIcons
@@ -332,12 +369,6 @@ export default function ProveedoresListScreen(): React.ReactElement {
                     styles.statusBtn,
                     { backgroundColor: colors.bgSubtle },
                   ]}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    item.activo === 1
-                      ? 'Marcar proveedor inactivo'
-                      : 'Reactivar proveedor'
-                  }
                 >
                   <MaterialCommunityIcons
                     name={item.activo === 1 ? 'archive-outline' : 'restore'}
@@ -359,8 +390,6 @@ export default function ProveedoresListScreen(): React.ReactElement {
                     { backgroundColor: colors.dangerSubtle },
                   ]}
                   hitSlop={8}
-                  accessibilityRole="button"
-                  accessibilityLabel="Borrar proveedor definitivamente"
                 >
                   <MaterialCommunityIcons
                     name="delete-outline"
@@ -412,11 +441,12 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: radius.md,
     borderWidth: 1,
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    gap: spacing.xs,
   },
   orderChip: {
     flexDirection: 'row',
@@ -424,10 +454,21 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
     gap: spacing.xs,
   },
   toggleText: { ...typography.small },
+  clearFilter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    gap: spacing.sm,
+  },
+  clearFilterText: { ...typography.small, flex: 1 },
   list: { flex: 1, borderTopWidth: 1 },
   listContent: { paddingBottom: 100 },
   row: {

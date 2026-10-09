@@ -18,17 +18,20 @@ export interface ProductoEstadisticas {
   ultima_venta: string | null;
 }
 
+export interface EliminarPermanenteResponse {
+  accion: 'eliminado' | 'desactivado';
+  id?: number;
+}
+
 export const productosApi = {
-  listar: (
-    params: {
-      busqueda?: string;
-      categoria_id?: number;
-      activo?: 0 | 1;
-      stock_bajo?: boolean;
-      limit?: number;
-      offset?: number;
-    } = {},
-  ) => {
+  listar: (params: {
+    busqueda?: string;
+    categoria_id?: number;
+    activo?: 0 | 1;
+    stock_bajo?: boolean;
+    limit?: number;
+    offset?: number;
+  } = {}) => {
     const qs = new URLSearchParams();
     if (params.busqueda) qs.append('busqueda', params.busqueda);
     if (params.categoria_id)
@@ -51,9 +54,7 @@ export const productosApi = {
     http.get<Producto>(`/productos/${id}`),
 
   buscarPorCodigo: (codigo: string): Promise<Producto> =>
-    http.get<Producto>(
-      `/productos/buscar?codigo=${encodeURIComponent(codigo)}`,
-    ),
+    http.get<Producto>(`/productos/barcode/${encodeURIComponent(codigo)}`),
 
   crear: (data: ProductoInput): Promise<Producto> =>
     http.post<Producto>('/productos', data),
@@ -63,6 +64,9 @@ export const productosApi = {
 
   eliminar: (id: number): Promise<null> =>
     http.delete<null>(`/productos/${id}`),
+
+  eliminarPermanente: (id: number): Promise<EliminarPermanenteResponse> =>
+    http.delete<EliminarPermanenteResponse>(`/productos/${id}/permanente`),
 
   stockBajo: (): Promise<Producto[]> =>
     http.get<Producto[]>('/productos/stock-bajo'),

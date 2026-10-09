@@ -60,13 +60,12 @@ export default function AppTabs(): React.ReactElement {
   return (
     <Tab.Navigator
       initialRouteName="Inicio"
-      detachInactiveScreens={false}
+      detachInactiveScreens={true}
       screenOptions={{
         headerShown: false,
 
-        // ⚡ FLUIDEZ
-        lazy: false,
-        freezeOnBlur: true,
+        lazy: true,
+        freezeOnBlur: false,
         animation: 'none',
 
         tabBarActiveTintColor: colors.textPrimary,

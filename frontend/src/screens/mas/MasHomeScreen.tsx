@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   View,
   Text,
@@ -17,12 +17,17 @@ import { useColors } from '@hooks/useColors';
 import { useAuthStore } from '@store/authStore';
 import { useUIStore } from '@store/uiStore';
 import { useTheme } from '@hooks/useTheme';
+import { usePermissions } from '@hooks/usePermissions';
 import Avatar from '@components/ui/Avatar';
 import Badge from '@components/ui/Badge';
 import Button from '@components/ui/Button';
 import AppHeader from '@components/layout/AppHeader';
 import { ROL_LABEL } from '@utils/constants';
-import { StaggeredSection, FadeInItem, ShineEffect } from '@components/animations';
+import {
+  StaggeredSection,
+  FadeInItem,
+  ShineEffect,
+} from '@components/animations';
 import type { Rol } from '@tipos/index';
 
 export default function MasHomeScreen(): React.ReactElement {
@@ -32,8 +37,9 @@ export default function MasHomeScreen(): React.ReactElement {
   const logout = useAuthStore((s) => s.logout);
   const showToast = useUIStore((s) => s.showToast);
   const { preference } = useTheme();
+  const perm = usePermissions();
 
-  const isAdmin = user?.rol === 'admin';
+  const isAdmin = perm.isAdmin;
   const rol: Rol = user?.rol ?? 'vendedor';
 
   const handleLogout = async (): Promise<void> => {
@@ -65,7 +71,7 @@ export default function MasHomeScreen(): React.ReactElement {
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
       >
-        {/* ============ Tarjeta de usuario ============ */}
+        {/* Tarjeta de usuario */}
         <StaggeredSection delay={0}>
           <View style={styles.userCardWrapper}>
             <ShineEffect borderRadius={radius.lg} delay={500}>
@@ -106,7 +112,7 @@ export default function MasHomeScreen(): React.ReactElement {
           </View>
         </StaggeredSection>
 
-        {/* ============ Mi cuenta ============ */}
+        {/* Mi cuenta */}
         <StaggeredSection delay={120}>
           <Section title="MI CUENTA" colors={colors}>
             <MenuGroup colors={colors}>
@@ -134,58 +140,173 @@ export default function MasHomeScreen(): React.ReactElement {
           </Section>
         </StaggeredSection>
 
-        {/* ============ Operación ============ */}
+        {/* Operación */}
         <StaggeredSection delay={240}>
           <Section title="OPERACIÓN" colors={colors}>
             <MenuGroup colors={colors}>
-              <MenuRow icon="cash-register" label="Caja" description="Apertura, cierre y movimientos" onPress={() => go('Caja')} colors={colors} />
-              <MenuRow icon="swap-horizontal" label="Inventario" description="Entradas, salidas y ajustes" onPress={() => go('Inventario')} colors={colors} />
-              <MenuRow icon="account-group-outline" label="Clientes" description="Cartera y estado de cuenta" onPress={() => go('Clientes')} colors={colors} />
-              <MenuRow icon="package-variant-closed" label="Proveedores" onPress={() => go('Proveedores')} colors={colors} />
-              <MenuRow icon="tag-outline" label="Categorías" onPress={() => go('Categorias')} colors={colors} />
-              <MenuRow icon="ticket-percent-outline" label="Promociones" onPress={() => go('Promociones')} colors={colors} />
-              <MenuRow icon="clipboard-list-outline" label="Órdenes de compra" onPress={() => go('OrdenesCompra')} colors={colors} />
-              <MenuRow icon="backup-restore" label="Devoluciones" onPress={() => go('Devoluciones')} colors={colors} last />
+              <MenuRow
+                icon="cash-register"
+                label="Caja"
+                description="Apertura, cierre y movimientos"
+                onPress={() => go('Caja')}
+                colors={colors}
+              />
+              <MenuRow
+                icon="swap-horizontal"
+                label="Inventario"
+                description="Entradas, salidas y ajustes"
+                onPress={() => go('Inventario')}
+                colors={colors}
+              />
+              <MenuRow
+                icon="account-group-outline"
+                label="Clientes"
+                description="Cartera y estado de cuenta"
+                onPress={() => go('Clientes')}
+                colors={colors}
+              />
+
+              {perm.puedeGestionarProveedores ? (
+                <MenuRow
+                  icon="package-variant-closed"
+                  label="Proveedores"
+                  onPress={() => go('Proveedores')}
+                  colors={colors}
+                />
+              ) : null}
+
+              {perm.puedeGestionarCategorias ? (
+                <MenuRow
+                  icon="tag-outline"
+                  label="Categorías"
+                  onPress={() => go('Categorias')}
+                  colors={colors}
+                />
+              ) : null}
+
+              {perm.puedeGestionarPromociones ? (
+                <MenuRow
+                  icon="ticket-percent-outline"
+                  label="Promociones"
+                  onPress={() => go('Promociones')}
+                  colors={colors}
+                />
+              ) : null}
+
+              {perm.puedeGestionarOrdenesCompra ? (
+                <MenuRow
+                  icon="clipboard-list-outline"
+                  label="Órdenes de compra"
+                  onPress={() => go('OrdenesCompra')}
+                  colors={colors}
+                />
+              ) : null}
+
+              <MenuRow
+                icon="backup-restore"
+                label="Devoluciones"
+                onPress={() => go('Devoluciones')}
+                colors={colors}
+                last
+              />
             </MenuGroup>
           </Section>
         </StaggeredSection>
 
-        {/* ============ Administración ============ */}
+        {/* Administración — SOLO ADMIN */}
         {isAdmin ? (
           <StaggeredSection delay={360}>
             <Section title="ADMINISTRACIÓN" colors={colors}>
               <MenuGroup colors={colors}>
-                <MenuRow icon="chart-line" label="Reportes" description="Ventas, utilidades y cartera" onPress={() => go('Reportes')} colors={colors} />
-                <MenuRow icon="star-circle-outline" label="Ranking de lealtad" onPress={() => go('LealtadRanking')} colors={colors} />
-                <MenuRow icon="account-multiple-outline" label="Usuarios" description="Equipo y permisos" onPress={() => go('Usuarios')} colors={colors} />
-                <MenuRow icon="history" label="Auditoría" description="Registro de actividad" onPress={() => go('Auditoria')} colors={colors} last />
+                <MenuRow
+                  icon="chart-line"
+                  label="Reportes"
+                  description="Ventas, utilidades y cartera"
+                  onPress={() => go('Reportes')}
+                  colors={colors}
+                />
+                <MenuRow
+                  icon="star-circle-outline"
+                  label="Ranking de lealtad"
+                  onPress={() => go('LealtadRanking')}
+                  colors={colors}
+                />
+                <MenuRow
+                  icon="account-multiple-outline"
+                  label="Usuarios"
+                  description="Equipo y permisos"
+                  onPress={() => go('Usuarios')}
+                  colors={colors}
+                />
+                <MenuRow
+                  icon="history"
+                  label="Auditoría"
+                  description="Registro de actividad"
+                  onPress={() => go('Auditoria')}
+                  colors={colors}
+                  last
+                />
               </MenuGroup>
             </Section>
           </StaggeredSection>
         ) : null}
 
-        {/* ============ Preferencias ============ */}
+        {/* Preferencias */}
         <StaggeredSection delay={480}>
           <Section title="PREFERENCIAS" colors={colors}>
             <MenuGroup colors={colors}>
-              <MenuRow icon="theme-light-dark" label="Apariencia" description={themeLabel} onPress={() => go('Apariencia')} colors={colors} />
-              <MenuRow icon="bell-outline" label="Notificaciones" description="Alertas y recordatorios" onPress={() => go('Notificaciones')} colors={colors} />
-              <MenuRow icon="cog-outline" label="Configuración" description="Datos del negocio, impuestos y respaldo" onPress={() => go('Configuracion')} colors={colors} last />
+              <MenuRow
+                icon="theme-light-dark"
+                label="Apariencia"
+                description={themeLabel}
+                onPress={() => go('Apariencia')}
+                colors={colors}
+              />
+              <MenuRow
+                icon="bell-outline"
+                label="Notificaciones"
+                description="Alertas y recordatorios"
+                onPress={() => go('Notificaciones')}
+                colors={colors}
+              />
+
+              {perm.puedeVerConfiguracion ? (
+                <MenuRow
+                  icon="cog-outline"
+                  label="Configuración"
+                  description="Datos del negocio, impuestos y respaldo"
+                  onPress={() => go('Configuracion')}
+                  colors={colors}
+                  last
+                />
+              ) : null}
             </MenuGroup>
           </Section>
         </StaggeredSection>
 
-        {/* ============ Ayuda ============ */}
+        {/* Ayuda */}
         <StaggeredSection delay={600}>
           <Section title="AYUDA" colors={colors}>
             <MenuGroup colors={colors}>
-              <MenuRow icon="help-circle-outline" label="Centro de ayuda" onPress={() => go('CentroAyuda')} colors={colors} />
-              <MenuRow icon="information-outline" label="Acerca de" description="Versión 2.0.0" onPress={() => go('AcercaDe')} colors={colors} last />
+              <MenuRow
+                icon="help-circle-outline"
+                label="Centro de ayuda"
+                onPress={() => go('CentroAyuda')}
+                colors={colors}
+              />
+              <MenuRow
+                icon="information-outline"
+                label="Acerca de"
+                description="Versión 2.0.0"
+                onPress={() => go('AcercaDe')}
+                colors={colors}
+                last
+              />
             </MenuGroup>
           </Section>
         </StaggeredSection>
 
-        {/* ============ Cerrar sesión ============ */}
+        {/* Cerrar sesión */}
         <StaggeredSection delay={720}>
           <View style={styles.logoutWrap}>
             <Button
@@ -208,9 +329,7 @@ export default function MasHomeScreen(): React.ReactElement {
   );
 }
 
-/* ============================================================
-   Subcomponentes con animaciones
-   ============================================================ */
+/* Subcomponentes */
 
 type Colors = ReturnType<typeof useColors>;
 
@@ -376,10 +495,6 @@ function ChevronButton({
     </Animated.View>
   );
 }
-
-/* ============================================================
-   Estilos
-   ============================================================ */
 
 const styles = StyleSheet.create({
   safe: { flex: 1 },

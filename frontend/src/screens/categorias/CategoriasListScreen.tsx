@@ -26,7 +26,6 @@ import RichEmptyState from '@components/ui/RichEmptyState';
 import SkeletonProducto from '@components/ui/SkeletonProducto';
 import ErrorState from '@components/feedback/ErrorState';
 import FAB from '@components/ui/FAB';
-import { getHiddenCatalogIds, hideCatalogId } from '@utils/hiddenCatalogItems';
 
 export default function CategoriasListScreen(): React.ReactElement {
   const navigation = useNavigation<any>();
@@ -49,13 +48,14 @@ export default function CategoriasListScreen(): React.ReactElement {
   const cargar = useCallback(async (): Promise<void> => {
     setError(null);
     try {
-      const [data, hiddenIds] = await Promise.all([
-        categoriasApi.listar(),
-        getHiddenCatalogIds('categories'),
-      ]);
-      setCategorias(data.filter((c) => !hiddenIds.has(c.id)));
+      // Sin filtros: trae TODAS las categorías del negocio
+      const data = await categoriasApi.listar();
+      console.log('[CATEGORIAS] Recibidas del backend:', data.length);
+      setCategorias(Array.isArray(data) ? data : []);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Error al cargar');
+      const msg = e instanceof Error ? e.message : 'Error al cargar';
+      console.log('[CATEGORIAS] Error:', msg);
+      setError(msg);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -71,11 +71,14 @@ export default function CategoriasListScreen(): React.ReactElement {
 
   const categoriasFiltradas = categorias
     .filter((c) => {
-      const coincideBusqueda = `${c.nombre} ${c.descripcion ?? ''}`
-        .toLowerCase()
-        .includes(debouncedBusqueda.toLowerCase());
-      const coincideEstado = mostrarInactivas || c.activo === 1;
-      return coincideBusqueda && coincideEstado;
+      // Filtro por búsqueda
+      if (debouncedBusqueda.trim() !== '') {
+        const texto = `${c.nombre} ${c.descripcion ?? ''}`.toLowerCase();
+        if (!texto.includes(debouncedBusqueda.toLowerCase())) return false;
+      }
+      // Filtro por activo
+      if (!mostrarInactivas && c.activo !== 1) return false;
+      return true;
     })
     .sort((a, b) => {
       const compare = a.nombre.localeCompare(b.nombre, 'es', {
@@ -86,9 +89,9 @@ export default function CategoriasListScreen(): React.ReactElement {
 
   const eliminarCategoria = async (categoria: Categoria): Promise<void> => {
     const ok = await confirm({
-      title: 'Borrar categoría definitivamente',
-      message: `Se eliminará "${categoria.nombre}" y no se podrá recuperar.`,
-      confirmLabel: 'Borrar',
+      title: 'Desactivar categoría',
+      message: `Se desactivará "${categoria.nombre}". Podrás reactivarla cuando quieras.`,
+      confirmLabel: 'Desactivar',
       variant: 'danger',
     });
     if (!ok) return;
@@ -96,14 +99,11 @@ export default function CategoriasListScreen(): React.ReactElement {
     setEliminandoId(categoria.id);
     try {
       await categoriasApi.eliminar(categoria.id);
-      await hideCatalogId('categories', categoria.id);
-      setCategorias((actuales) =>
-        actuales.filter((item) => item.id !== categoria.id),
-      );
-      showToast('Categoría eliminada.', 'success');
+      await cargar(); // 🔄 Recargar desde el backend
+      showToast('Categoría desactivada.', 'success');
     } catch (e) {
       const msg =
-        e instanceof Error ? e.message : 'No se pudo borrar la categoría';
+        e instanceof Error ? e.message : 'No se pudo desactivar la categoría';
       showToast(msg, 'error');
     } finally {
       setEliminandoId(null);
@@ -117,11 +117,7 @@ export default function CategoriasListScreen(): React.ReactElement {
     setActualizandoId(categoria.id);
     try {
       await categoriasApi.actualizar(categoria.id, { activo });
-      setCategorias((actuales) =>
-        actuales.map((item) =>
-          item.id === categoria.id ? { ...item, activo } : item,
-        ),
-      );
+      await cargar(); // 🔄 Recargar desde el backend
     } catch (e) {
       const msg =
         e instanceof Error ? e.message : 'No se pudo cambiar el estado';
@@ -131,7 +127,8 @@ export default function CategoriasListScreen(): React.ReactElement {
     }
   };
 
-  const hayFiltro = busqueda.length > 0 || mostrarInactivas;
+  const hayFiltro =
+    busqueda.length > 0 || mostrarInactivas || !ordenAsc;
 
   return (
     <SafeAreaView
@@ -140,9 +137,7 @@ export default function CategoriasListScreen(): React.ReactElement {
     >
       <TopBar
         title="Categorías"
-        subtitle={`${categoriasFiltradas.length} ${
-          categoriasFiltradas.length === 1 ? 'categoría' : 'categorías'
-        }`}
+        subtitle={`${categoriasFiltradas.length} de ${categorias.length}`}
         onBack={() => navigation.goBack()}
       />
 
@@ -167,6 +162,15 @@ export default function CategoriasListScreen(): React.ReactElement {
             autoCapitalize="none"
             autoCorrect={false}
           />
+          {busqueda.length > 0 ? (
+            <Pressable onPress={() => setBusqueda('')} hitSlop={8}>
+              <MaterialCommunityIcons
+                name="close-circle"
+                size={18}
+                color={colors.textMuted}
+              />
+            </Pressable>
+          ) : null}
         </View>
       </View>
 
@@ -175,16 +179,34 @@ export default function CategoriasListScreen(): React.ReactElement {
           onPress={() => setMostrarInactivas((prev) => !prev)}
           style={[
             styles.toggleChip,
-            { backgroundColor: colors.surface, borderColor: colors.border },
+            {
+              backgroundColor: mostrarInactivas
+                ? colors.primary
+                : colors.surface,
+              borderColor: mostrarInactivas
+                ? colors.primary
+                : colors.border,
+            },
           ]}
         >
-          <Switch
-            value={mostrarInactivas}
-            onValueChange={setMostrarInactivas}
-            trackColor={{ true: colors.primary, false: colors.border }}
+          <MaterialCommunityIcons
+            name={mostrarInactivas ? 'eye' : 'eye-off'}
+            size={16}
+            color={
+              mostrarInactivas ? colors.textInverse : colors.textPrimary
+            }
           />
-          <Text style={[styles.toggleText, { color: colors.textPrimary }]}>
-            Mostrar inactivas
+          <Text
+            style={[
+              styles.toggleText,
+              {
+                color: mostrarInactivas
+                  ? colors.textInverse
+                  : colors.textPrimary,
+              },
+            ]}
+          >
+            {mostrarInactivas ? 'Viendo todas' : 'Solo activas'}
           </Text>
         </Pressable>
         <Pressable
@@ -204,6 +226,30 @@ export default function CategoriasListScreen(): React.ReactElement {
           </Text>
         </Pressable>
       </View>
+
+      {hayFiltro && categoriasFiltradas.length !== categorias.length ? (
+        <Pressable
+          onPress={() => {
+            setBusqueda('');
+            setMostrarInactivas(true);
+            setOrdenAsc(true);
+          }}
+          style={[
+            styles.clearFilter,
+            { backgroundColor: colors.warningSubtle },
+          ]}
+        >
+          <MaterialCommunityIcons
+            name="filter-remove-outline"
+            size={14}
+            color={colors.warning}
+          />
+          <Text style={[styles.clearFilterText, { color: colors.warning }]}>
+            Hay {categorias.length - categoriasFiltradas.length} oculta(s).
+            Toca para mostrar todas.
+          </Text>
+        </Pressable>
+      ) : null}
 
       {loading && categorias.length === 0 ? (
         <View>
@@ -238,7 +284,8 @@ export default function CategoriasListScreen(): React.ReactElement {
             hayFiltro
               ? () => {
                   setBusqueda('');
-                  setMostrarInactivas(false);
+                  setMostrarInactivas(true);
+                  setOrdenAsc(true);
                 }
               : undefined
           }
@@ -308,9 +355,7 @@ export default function CategoriasListScreen(): React.ReactElement {
                       style={[styles.rowSubtitle, { color: colors.textMuted }]}
                       numberOfLines={2}
                     >
-                      {item.activo === 1
-                        ? 'Activa'
-                        : 'Inactiva · No se negocia actualmente'}
+                      {item.activo === 1 ? 'Activa' : 'Inactiva'}
                       {item.descripcion ? ` · ${item.descripcion}` : ''}
                     </Text>
                   </View>
@@ -357,7 +402,7 @@ export default function CategoriasListScreen(): React.ReactElement {
                   ]}
                   hitSlop={8}
                   accessibilityRole="button"
-                  accessibilityLabel="Borrar categoría definitivamente"
+                  accessibilityLabel="Desactivar categoría"
                 >
                   <MaterialCommunityIcons
                     name="delete-outline"
@@ -409,11 +454,12 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: radius.md,
     borderWidth: 1,
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    gap: spacing.xs,
   },
   orderChip: {
     flexDirection: 'row',
@@ -421,10 +467,21 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
     gap: spacing.xs,
   },
   toggleText: { ...typography.small },
+  clearFilter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.md,
+    gap: spacing.sm,
+  },
+  clearFilterText: { ...typography.small, flex: 1 },
   list: { flex: 1, borderTopWidth: 1 },
   listContent: { paddingBottom: 100 },
   row: {

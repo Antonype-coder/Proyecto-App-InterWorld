@@ -32,7 +32,7 @@ if (!class_exists('Configuracion')) {
             return $out;
         }
 
-        /** Alias para mantener compatibilidad. */
+        /** Alias de allByGroup(). */
         public function todas(): array
         {
             return $this->allByGroup();
@@ -54,9 +54,19 @@ if (!class_exists('Configuracion')) {
             return $this->cast($row['valor'], $row['tipo']);
         }
 
-        /** Guarda o actualiza una clave. */
-        public function set(string $clave, mixed $valor, string $tipo = 'string', string $grupo = 'general'): bool
+        /** Alias de obtener() para compatibilidad. */
+        public function get(string $clave, mixed $default = null): mixed
         {
+            return $this->obtener($clave, $default);
+        }
+
+        /** Guarda o actualiza una clave. */
+        public function set(
+            string $clave,
+            mixed $valor,
+            string $tipo = 'string',
+            string $grupo = 'general'
+        ): bool {
             $nid = $this->negocioId();
             if ($nid === null) return false;
 

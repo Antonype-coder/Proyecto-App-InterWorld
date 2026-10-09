@@ -1,20 +1,26 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 
-import { colors, spacing, typography, radius } from '@theme/index';
+import { spacing, typography } from '@theme/index';
+import { useColors } from '@hooks/useColors';
+import type { AppColors } from '@theme/colors';
 import { useAuthStore } from '@store/authStore';
 import { useUIStore } from '@store/uiStore';
 import { http } from '@api/client';
 import KeyboardScreen from '@components/layout/KeyboardScreen';
 import TopBar from '@components/layout/TopBar';
+import Card from '@components/ui/Card';
 import Input from '@components/ui/Input';
 import Button from '@components/ui/Button';
 import type { Usuario } from '@tipos/index';
 
 export default function EditarPerfilScreen(): React.ReactElement {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const user = useAuthStore((s) => s.user);
   const updateUser = useAuthStore((s) => s.updateUser);
   const showToast = useUIStore((s) => s.showToast);
@@ -84,32 +90,7 @@ export default function EditarPerfilScreen(): React.ReactElement {
       header={
         <TopBar title="Editar perfil" onBack={() => navigation.goBack()} />
       }
-    >
-      <Text style={styles.sectionLabel}>DATOS PERSONALES</Text>
-
-      <Input
-        label="Nombre completo"
-        icon="account-outline"
-        value={nombre}
-        onChangeText={setNombre}
-        error={errorNombre ?? undefined}
-        autoCapitalize="words"
-        required
-      />
-
-      <Input
-        label="Correo electrónico"
-        icon="email-outline"
-        value={email}
-        onChangeText={setEmail}
-        error={errorEmail ?? undefined}
-        autoCapitalize="none"
-        autoCorrect={false}
-        keyboardType="email-address"
-        required
-      />
-
-      <View style={styles.actions}>
+      footer={
         <Button
           label="Guardar cambios"
           variant="primary"
@@ -119,21 +100,48 @@ export default function EditarPerfilScreen(): React.ReactElement {
           disabled={saving}
           fullWidth
         />
+      }
+      contentContainerStyle={{ padding: 0 }}
+    >
+      <View style={styles.content}>
+        <Card variant="default" style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+            Datos personales
+          </Text>
+
+          <Input
+            label="Nombre completo"
+            icon="account-outline"
+            value={nombre}
+            onChangeText={setNombre}
+            error={errorNombre ?? undefined}
+            autoCapitalize="words"
+            required
+          />
+
+          <Input
+            label="Correo electrónico"
+            icon="email-outline"
+            value={email}
+            onChangeText={setEmail}
+            error={errorEmail ?? undefined}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            required
+          />
+        </Card>
       </View>
     </KeyboardScreen>
   );
 }
 
-const styles = StyleSheet.create({
-  sectionLabel: {
-    ...typography.overline,
-    color: colors.textMuted,
-    marginBottom: spacing.md,
-  },
-  actions: {
-    marginTop: spacing.lg,
-    paddingTop: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-});
+const makeStyles = (colors: AppColors) =>
+  StyleSheet.create({
+    content: { padding: spacing.lg, paddingBottom: spacing.giant },
+    section: { marginBottom: spacing.md },
+    sectionTitle: {
+      ...typography.h3,
+      marginBottom: spacing.lg,
+    },
+  });

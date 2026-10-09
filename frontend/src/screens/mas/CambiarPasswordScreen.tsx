@@ -1,19 +1,25 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 
-import { colors, spacing, typography, radius } from '@theme/index';
+import { spacing, typography, radius } from '@theme/index';
+import { useColors } from '@hooks/useColors';
+import type { AppColors } from '@theme/colors';
 import { useUIStore } from '@store/uiStore';
 import { http } from '@api/client';
 import KeyboardScreen from '@components/layout/KeyboardScreen';
 import TopBar from '@components/layout/TopBar';
+import Card from '@components/ui/Card';
 import Input from '@components/ui/Input';
 import Button from '@components/ui/Button';
 
 export default function CambiarPasswordScreen(): React.ReactElement {
-  const navigation = useNavigation();
+  const navigation = useNavigation<any>();
+  const colors = useColors();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
+
   const showToast = useUIStore((s) => s.showToast);
 
   const [actual, setActual] = useState('');
@@ -94,58 +100,7 @@ export default function CambiarPasswordScreen(): React.ReactElement {
           onBack={() => navigation.goBack()}
         />
       }
-    >
-      <Text style={styles.sectionLabel}>CONTRASEÑA</Text>
-
-      <Input
-        label="Contraseña actual"
-        icon="lock-outline"
-        secureTextEntry
-        value={actual}
-        onChangeText={setActual}
-        error={errorActual ?? undefined}
-        autoCapitalize="none"
-        autoCorrect={false}
-        required
-      />
-
-      <Input
-        label="Nueva contraseña"
-        icon="lock-reset"
-        secureTextEntry
-        value={nueva}
-        onChangeText={setNueva}
-        error={errorNueva ?? undefined}
-        helper="Mínimo 8 caracteres"
-        autoCapitalize="none"
-        autoCorrect={false}
-        required
-      />
-
-      <Input
-        label="Confirmar nueva contraseña"
-        icon="lock-check-outline"
-        secureTextEntry
-        value={confirmar}
-        onChangeText={setConfirmar}
-        error={errorConfirmar ?? undefined}
-        autoCapitalize="none"
-        autoCorrect={false}
-        required
-      />
-
-      <View style={styles.note}>
-        <MaterialCommunityIcons
-          name="information-outline"
-          size={16}
-          color={colors.info}
-        />
-        <Text style={styles.noteText}>
-          Por seguridad, se cerrará la sesión en otros dispositivos.
-        </Text>
-      </View>
-
-      <View style={styles.actions}>
+      footer={
         <Button
           label="Cambiar contraseña"
           variant="primary"
@@ -155,38 +110,97 @@ export default function CambiarPasswordScreen(): React.ReactElement {
           disabled={saving}
           fullWidth
         />
+      }
+      contentContainerStyle={{ padding: 0 }}
+    >
+      <View style={styles.content}>
+        <Card variant="default" style={styles.section}>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+            Contraseña
+          </Text>
+
+          <Input
+            label="Contraseña actual"
+            icon="lock-outline"
+            secureTextEntry
+            value={actual}
+            onChangeText={setActual}
+            error={errorActual ?? undefined}
+            autoCapitalize="none"
+            autoCorrect={false}
+            required
+          />
+
+          <Input
+            label="Nueva contraseña"
+            icon="lock-reset"
+            secureTextEntry
+            value={nueva}
+            onChangeText={setNueva}
+            error={errorNueva ?? undefined}
+            helper="Mínimo 8 caracteres"
+            autoCapitalize="none"
+            autoCorrect={false}
+            required
+          />
+
+          <Input
+            label="Confirmar nueva contraseña"
+            icon="lock-check-outline"
+            secureTextEntry
+            value={confirmar}
+            onChangeText={setConfirmar}
+            error={errorConfirmar ?? undefined}
+            autoCapitalize="none"
+            autoCorrect={false}
+            required
+          />
+        </Card>
+
+        <Card
+          variant="default"
+          style={[
+            styles.section,
+            {
+              backgroundColor: colors.infoSubtle,
+              borderColor: colors.info,
+              borderWidth: 1,
+            },
+          ]}
+        >
+          <View style={styles.noteRow}>
+            <MaterialCommunityIcons
+              name="information-outline"
+              size={18}
+              color={colors.info}
+            />
+            <Text style={[styles.noteText, { color: colors.infoText ?? colors.info }]}>
+              Por seguridad, se cerrará la sesión en otros dispositivos después
+              de cambiar la contraseña.
+            </Text>
+          </View>
+        </Card>
       </View>
     </KeyboardScreen>
   );
 }
 
-const styles = StyleSheet.create({
-  sectionLabel: {
-    ...typography.overline,
-    color: colors.textMuted,
-    marginBottom: spacing.md,
-  },
-  note: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: spacing.sm,
-    backgroundColor: colors.infoSubtle,
-    borderWidth: 1,
-    borderColor: colors.info,
-    borderRadius: radius.md,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-  },
-  noteText: {
-    ...typography.small,
-    color: colors.infoText,
-    flex: 1,
-    lineHeight: 18,
-  },
-  actions: {
-    marginTop: spacing.md,
-    paddingTop: spacing.lg,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-});
+const makeStyles = (colors: AppColors) =>
+  StyleSheet.create({
+    content: { padding: spacing.lg, paddingBottom: spacing.giant },
+    section: { marginBottom: spacing.md },
+    sectionTitle: {
+      ...typography.h3,
+      marginBottom: spacing.lg,
+    },
+    noteRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: spacing.sm,
+    },
+    noteText: {
+      ...typography.small,
+      flex: 1,
+      lineHeight: 18,
+    },
+  });

@@ -1,6 +1,7 @@
 // src/services/pdf.service.ts
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
 import { formatCurrency, formatDateTime } from '@utils/format';
 import { APP_NAME } from '@utils/constants';
 import { getImageUrl } from '@utils/image';
@@ -72,19 +73,50 @@ interface ReporteCarteraData {
   };
 }
 
+// ============================================================================
+// Convierte una URL de imagen a data URI (base64)
+// Necesario porque expo-print NO carga imágenes http://
+// ============================================================================
+async function imagenABase64(url: string): Promise<string | null> {
+  try {
+    const extension = url.split('.').pop()?.split('?')[0]?.toLowerCase() ?? 'jpg';
+    const localUri = `${FileSystem.cacheDirectory}logo-report-${Date.now()}.${extension}`;
+
+    const download = await FileSystem.downloadAsync(url, localUri);
+    if (download.status !== 200) return null;
+
+    const base64 = await FileSystem.readAsStringAsync(download.uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+
+    const mime =
+      extension === 'png'
+        ? 'image/png'
+        : extension === 'webp'
+          ? 'image/webp'
+          : extension === 'gif'
+            ? 'image/gif'
+            : 'image/jpeg';
+
+    return `data:${mime};base64,${base64}`;
+  } catch {
+    return null;
+  }
+}
+
 export const pdfService = {
   async generarReporteVentas(data: ReporteVentasData): Promise<void> {
-    const html = buildVentasHTML(data);
+    const html = await buildVentasHTML(data);
     await generarYCompartirPDF(html, `reporte-ventas-${data.desde}-${data.hasta}`);
   },
 
   async generarReporteInventario(data: ReporteInventarioData): Promise<void> {
-    const html = buildInventarioHTML(data);
+    const html = await buildInventarioHTML(data);
     await generarYCompartirPDF(html, `reporte-inventario`);
   },
 
   async generarReporteCartera(data: ReporteCarteraData): Promise<void> {
-    const html = buildCarteraHTML(data);
+    const html = await buildCarteraHTML(data);
     await generarYCompartirPDF(html, `reporte-cartera`);
   },
 };
@@ -104,18 +136,37 @@ async function generarYCompartirPDF(html: string, filename: string): Promise<voi
   });
 }
 
-function buildHeader(negocio: { nombre: string; nit?: string; telefono?: string; direccion?: string; logo?: string }, titulo: string): string {
-  const logoUrl = getImageUrl(negocio.logo ?? null);
-  const logoHtml = logoUrl
-    ? `<img src="${escapeHtml(logoUrl)}" style="display:block;max-width:180px;max-height:72px;object-fit:contain;margin:0 auto 12px;" />`
-    : '';
+async function buildHeader(
+  negocio: {
+    nombre: string;
+    nit?: string;
+    telefono?: string;
+    direccion?: string;
+    logo?: string;
+  },
+  titulo: string,
+): Promise<string> {
+  let logoHtml = '';
+
+  const logoPath = negocio.logo?.trim();
+  if (logoPath) {
+    const logoUrl = getImageUrl(logoPath);
+    if (logoUrl) {
+      // Intentar convertir a base64 (lo que realmente funciona en expo-print)
+      const dataUri = await imagenABase64(logoUrl);
+      const finalSrc = dataUri ?? logoUrl;
+
+      logoHtml = `<img src="${escapeHtml(finalSrc)}" style="display:block;max-width:180px;max-height:72px;object-fit:contain;margin:0 auto 12px;" />`;
+    }
+  }
+
   return `
     <div style="text-align: center; margin-bottom: 30px; border-bottom: 2px solid #111827; padding-bottom: 20px;">
       ${logoHtml}
-      <h1 style="margin: 0; color: #111827; font-size: 24px;">${negocio.nombre || APP_NAME}</h1>
-      ${negocio.nit ? `<p style="margin: 5px 0; color: #4B5563; font-size: 12px;">NIT: ${negocio.nit}</p>` : ''}
-      ${negocio.direccion ? `<p style="margin: 5px 0; color: #4B5563; font-size: 12px;">${negocio.direccion}</p>` : ''}
-      ${negocio.telefono ? `<p style="margin: 5px 0; color: #4B5563; font-size: 12px;">Tel: ${negocio.telefono}</p>` : ''}
+      <h1 style="margin: 0; color: #111827; font-size: 24px;">${escapeHtml(negocio.nombre || APP_NAME)}</h1>
+      ${negocio.nit ? `<p style="margin: 5px 0; color: #4B5563; font-size: 12px;">NIT: ${escapeHtml(negocio.nit)}</p>` : ''}
+      ${negocio.direccion ? `<p style="margin: 5px 0; color: #4B5563; font-size: 12px;">${escapeHtml(negocio.direccion)}</p>` : ''}
+      ${negocio.telefono ? `<p style="margin: 5px 0; color: #4B5563; font-size: 12px;">Tel: ${escapeHtml(negocio.telefono)}</p>` : ''}
       <h2 style="margin: 20px 0 0 0; color: #111827; font-size: 18px;">${titulo}</h2>
       <p style="margin: 5px 0 0 0; color: #6B7280; font-size: 11px;">Generado el ${formatDateTime(new Date().toISOString())}</p>
     </div>
@@ -164,14 +215,16 @@ const TABLE_STYLES = `
   </style>
 `;
 
-function buildVentasHTML(data: ReporteVentasData): string {
-  const rows = data.ventas.map((v) => `
+async function buildVentasHTML(data: ReporteVentasData): Promise<string> {
+  const rows = data.ventas
+    .map(
+      (v) => `
     <tr>
-      <td>${v.numero}</td>
+      <td>${escapeHtml(v.numero)}</td>
       <td>${formatDateTime(v.fecha)}</td>
-      <td>${v.cliente}</td>
-      <td>${v.vendedor}</td>
-      <td class="text-center">${v.tipoPago}</td>
+      <td>${escapeHtml(v.cliente)}</td>
+      <td>${escapeHtml(v.vendedor)}</td>
+      <td class="text-center">${escapeHtml(v.tipoPago)}</td>
       <td class="text-right">${formatCurrency(v.total)}</td>
       <td class="text-center">
         <span class="badge ${v.estado === 'anulada' ? 'badge-danger' : 'badge-success'}">
@@ -179,16 +232,20 @@ function buildVentasHTML(data: ReporteVentasData): string {
         </span>
       </td>
     </tr>
-  `).join('');
+  `,
+    )
+    .join('');
+
+  const header = await buildHeader(data.negocio, 'REPORTE DE VENTAS');
 
   return `
     <!DOCTYPE html>
     <html>
       <head><meta charset="utf-8">${TABLE_STYLES}</head>
       <body>
-        ${buildHeader(data.negocio, 'REPORTE DE VENTAS')}
+        ${header}
         <p style="text-align: center; color: #6B7280; font-size: 12px; margin-bottom: 20px;">
-          Del ${data.desde} al ${data.hasta}
+          Del ${escapeHtml(data.desde)} al ${escapeHtml(data.hasta)}
         </p>
         <div class="summary">
           <div class="summary-item">
@@ -224,26 +281,32 @@ function buildVentasHTML(data: ReporteVentasData): string {
   `;
 }
 
-function buildInventarioHTML(data: ReporteInventarioData): string {
-  const rows = data.productos.map((p) => `
+async function buildInventarioHTML(data: ReporteInventarioData): Promise<string> {
+  const rows = data.productos
+    .map(
+      (p) => `
     <tr>
-      <td>${p.codigo}</td>
-      <td>${p.nombre}</td>
-      <td>${p.categoria}</td>
+      <td>${escapeHtml(p.codigo)}</td>
+      <td>${escapeHtml(p.nombre)}</td>
+      <td>${escapeHtml(p.categoria)}</td>
       <td class="text-center">${p.stock}</td>
       <td class="text-center">${p.stockMinimo}</td>
       <td class="text-right">${formatCurrency(p.precioCompra)}</td>
       <td class="text-right">${formatCurrency(p.precioVenta)}</td>
       <td class="text-right"><strong>${formatCurrency(p.valorTotal)}</strong></td>
     </tr>
-  `).join('');
+  `,
+    )
+    .join('');
+
+  const header = await buildHeader(data.negocio, 'REPORTE DE INVENTARIO');
 
   return `
     <!DOCTYPE html>
     <html>
       <head><meta charset="utf-8">${TABLE_STYLES}</head>
       <body>
-        ${buildHeader(data.negocio, 'REPORTE DE INVENTARIO')}
+        ${header}
         <div class="summary">
           <div class="summary-item">
             <div class="summary-label">Productos activos</div>
@@ -275,24 +338,30 @@ function buildInventarioHTML(data: ReporteInventarioData): string {
   `;
 }
 
-function buildCarteraHTML(data: ReporteCarteraData): string {
-  const rows = data.clientes.map((c) => `
+async function buildCarteraHTML(data: ReporteCarteraData): Promise<string> {
+  const rows = data.clientes
+    .map(
+      (c) => `
     <tr>
-      <td>${c.nombre}</td>
-      <td>${c.documento}</td>
-      <td>${c.telefono}</td>
+      <td>${escapeHtml(c.nombre)}</td>
+      <td>${escapeHtml(c.documento)}</td>
+      <td>${escapeHtml(c.telefono)}</td>
       <td class="text-right">${formatCurrency(c.cupo)}</td>
       <td class="text-right"><strong style="color: #DC2626;">${formatCurrency(c.deuda)}</strong></td>
       <td class="text-right">${formatCurrency(c.disponible)}</td>
     </tr>
-  `).join('');
+  `,
+    )
+    .join('');
+
+  const header = await buildHeader(data.negocio, 'REPORTE DE CARTERA');
 
   return `
     <!DOCTYPE html>
     <html>
       <head><meta charset="utf-8">${TABLE_STYLES}</head>
       <body>
-        ${buildHeader(data.negocio, 'REPORTE DE CARTERA')}
+        ${header}
         <div class="summary">
           <div class="summary-item">
             <div class="summary-label">Clientes con deuda</div>

@@ -92,5 +92,32 @@ if (!class_exists('AuthController')) {
         {
             Response::success(null, 'Sesión cerrada correctamente.');
         }
+
+        public function changePassword(Request $request): void
+        {
+            $data = $request->all();
+
+            $v = new Validator($data);
+            $v->required('password_actual', 'La contraseña actual es obligatoria.')
+              ->required('password_nueva', 'La nueva contraseña es obligatoria.')
+              ->minLength('password_nueva', 8);
+
+            if ($v->fails()) {
+                Response::validationError($v->errors());
+            }
+
+            $userId = Auth::id();
+            if ($userId === null) {
+                Response::unauthorized('No autenticado.');
+            }
+
+            $resultado = $this->service->changePassword(
+                $userId,
+                (string) $data['password_actual'],
+                (string) $data['password_nueva']
+            );
+
+            Response::success($resultado, 'Contraseña actualizada correctamente.');
+        }
     }
 }

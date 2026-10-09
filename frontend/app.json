@@ -48,7 +48,8 @@
           "cameraPermission": "Interworld necesita la cámara para tomar fotos de los productos.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-asset"
     ]
   }
 }

@@ -54,6 +54,7 @@ $router->post('/api/auth/registrar-negocio',  'AuthController@registrarNegocio')
 $router->post('/api/auth/register',           'AuthController@register',          $adminOnly);
 $router->get ('/api/auth/me',                 'AuthController@me',                $auth);
 $router->post('/api/auth/logout',             'AuthController@logout',            $auth);
+$router->post('/api/auth/change-password',    'AuthController@changePassword',    $auth);
 
 // ==================================================================
 // USUARIOS (solo admin)
@@ -92,6 +93,7 @@ $router->get ('/api/productos',                    'ProductoController@index',  
 $router->get ('/api/productos/{id}',               'ProductoController@show',          $auth);
 $router->post('/api/productos',                    'ProductoController@store',         $adminOnly);
 $router->put ('/api/productos/{id}',               'ProductoController@update',        $adminOnly);
+$router->delete('/api/productos/{id}/permanente',  'ProductoController@destroyPermanente', $adminOnly);
 $router->delete('/api/productos/{id}',             'ProductoController@destroy',       $adminOnly);
 
 // ==================================================================
@@ -200,13 +202,13 @@ $router->get('/api/auditoria', 'AuditoriaController@index', $adminOnly);
 // ==================================================================
 // CONFIGURACIÓN
 // ==================================================================
-$router->get ('/api/configuracion',      'ConfiguracionController@index',  $auth);
-$router->put ('/api/configuracion',      'ConfiguracionController@update', $adminOnly);
-$router->put ('/api/configuracion/logo', 'ConfiguracionController@updateLogo', $auth);
+$router->get   ('/api/configuracion',      'ConfiguracionController@index',      $auth);
+$router->put   ('/api/configuracion',      'ConfiguracionController@update',     $adminOnly);
+$router->put   ('/api/configuracion/logo', 'ConfiguracionController@updateLogo', $auth);
 $router->delete('/api/configuracion/logo', 'ConfiguracionController@deleteLogo', $auth);
 
 // ==================================================================
 // UPLOADS
 // ==================================================================
-$router->post('/api/uploads/productos', 'UploadController@imagenProducto', $adminOnly);
-$router->post('/api/uploads/logo',      'UploadController@logo',     $auth);
+$router->post('/api/uploads/productos', 'UploadController@imagenProducto', $auth);
+$router->post('/api/uploads/logo',      'UploadController@imagenLogo',     $auth);

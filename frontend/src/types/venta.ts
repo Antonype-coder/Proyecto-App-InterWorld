@@ -50,13 +50,13 @@ export interface VentaItemInput {
 }
 
 export interface VentaInput {
-  idempotency_key?: string;
-  tipo_pago: TipoPago;
-  cliente_id?: number | null;
-  descuento?: number;
+  tipo_pago: 'contado' | 'credito';
+  cliente_id: number | null;
+  caja_sesion_id?: number | null;
+  descuento: number;
+  metodo_pago?: string;
   notas?: string;
-  metodo_pago?: 'efectivo' | 'tarjeta' | 'transferencia' | 'otro';
-  items: VentaItemInput[];
+  items: Array<{ producto_id: number; cantidad: number }>;
 }
 
 export interface CarritoItem {

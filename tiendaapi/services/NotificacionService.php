@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../models/Notificacion.php';
+require_once __DIR__ . '/../core/Auth.php';
 
 if (!class_exists('NotificacionService')) {
     class NotificacionService
@@ -36,13 +37,21 @@ if (!class_exists('NotificacionService')) {
             ]);
         }
 
-        public function marcarTodas(int $usuarioId): void
+                public function marcarTodas(int $usuarioId): void
         {
-            $this->notificaciones->db()->prepare(
-                "UPDATE notificaciones
-                 SET leida = 1, leida_at = NOW()
-                 WHERE (usuario_id = :uid OR usuario_id IS NULL) AND leida = 0"
-            )->execute(['uid' => $usuarioId]);
+            $nid = class_exists('Auth') ? Auth::negocioId() : null;
+
+            $sql = "UPDATE notificaciones
+                    SET leida = 1, leida_at = NOW()
+                    WHERE (usuario_id = :uid OR usuario_id IS NULL) AND leida = 0";
+            $params = ['uid' => $usuarioId];
+
+            if ($nid !== null) {
+                $sql .= " AND negocio_id = :nid";
+                $params['nid'] = $nid;
+            }
+
+            $this->notificaciones->db()->prepare($sql)->execute($params);
         }
     }
 }

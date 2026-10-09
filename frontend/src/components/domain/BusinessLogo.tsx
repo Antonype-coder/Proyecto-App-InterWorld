@@ -14,9 +14,21 @@ export default function BusinessLogo({
   style,
 }: BusinessLogoProps): React.ReactElement | null {
   const logoPath = useConfiguracionStore((state) => {
-    const value = state.data?.negocio?.logo_url ?? state.data?.general?.logo_url;
+    const data = state.data as any;
+    const general = data?.general ?? {};
+    const negocio = data?.negocio ?? {};
+
+    const value =
+      general.logo_url ??
+      negocio.logo_url ??
+      general.negocio_logo ??
+      negocio.negocio_logo ??
+      general.logo ??
+      negocio.logo;
+
     return typeof value === 'string' && value.trim() ? value : null;
   });
+
   const uri = getImageUrl(logoPath);
 
   if (!uri) return null;

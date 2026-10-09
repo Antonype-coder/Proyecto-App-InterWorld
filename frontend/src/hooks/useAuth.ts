@@ -1,13 +1,15 @@
 import { useAuthStore } from '@store/authStore';
+import { usePermissions } from './usePermissions';
 
 export function useAuth() {
   const user = useAuthStore((s) => s.user);
-  const isAdmin = useAuthStore((s) => s.isAdmin());
+  const permissions = usePermissions();
 
   return {
     user,
-    isAdmin,
-    isVendedor: user?.rol === 'vendedor',
+    isAdmin: permissions.isAdmin,
+    isVendedor: permissions.isVendedor,
     isLoggedIn: user !== null,
+    permissions,
   };
 }

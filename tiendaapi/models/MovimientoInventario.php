@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/BaseModel.php';
+require_once __DIR__ . '/../core/Auth.php';
 
 if (!class_exists('MovimientoInventario')) {
     class MovimientoInventario extends BaseModel
@@ -9,12 +10,20 @@ if (!class_exists('MovimientoInventario')) {
         protected string $table = 'movimientos_inventario';
         protected string $primaryKey = 'id';
         protected array $fillable = [
-            'producto_id', 'usuario_id', 'tipo', 'cantidad',
+            'negocio_id', 'producto_id', 'usuario_id', 'tipo', 'cantidad',
             'stock_anterior', 'stock_nuevo', 'referencia_tipo', 'referencia_id', 'motivo',
         ];
+        protected bool $tenantScoped = true;
+
+        private function nid(): ?int
+        {
+            return class_exists('Auth') ? Auth::negocioId() : null;
+        }
 
         public function allWithRelations(array $filtros = [], string $orderBy = 'm.id DESC', int $limit = 100, int $offset = 0): array
         {
+            $nid = $this->nid();
+
             $sql = "SELECT m.*, p.nombre AS producto_nombre, p.codigo_barras AS producto_codigo,
                            u.nombre AS usuario_nombre
                     FROM movimientos_inventario m
@@ -22,6 +31,11 @@ if (!class_exists('MovimientoInventario')) {
                     INNER JOIN usuarios u ON u.id = m.usuario_id
                     WHERE 1=1";
             $params = [];
+
+            if ($nid !== null) {
+                $sql .= " AND m.negocio_id = :nid";
+                $params['nid'] = $nid;
+            }
 
             if (!empty($filtros['producto_id'])) {
                 $sql .= " AND m.producto_id = :producto_id";

@@ -111,11 +111,14 @@ if (!class_exists('Producto')) {
             return $producto === null ? null : $this->incluirImagenes([$producto])[0];
         }
 
-        public function barcodeExists(string $codigo, ?int $excludeId = null): bool
+               public function barcodeExists(string $codigo, ?int $excludeId = null): bool
         {
             $nid = $this->nid();
 
-            $sql = "SELECT COUNT(*) FROM {$this->table} WHERE codigo_barras = :codigo";
+            // Solo verificar productos ACTIVOS.
+            // Si un producto está desactivado, se permite reutilizar su código.
+            $sql = "SELECT COUNT(*) FROM {$this->table}
+                    WHERE codigo_barras = :codigo AND activo = 1";
             $params = ['codigo' => $codigo];
 
             if ($nid !== null) {
@@ -128,6 +131,24 @@ if (!class_exists('Producto')) {
             }
 
             return (int) $this->rawScalar($sql, $params) > 0;
+        }
+
+                public function findInactivoByBarcode(string $codigo): ?array
+        {
+            $nid = $this->nid();
+
+            $sql = "SELECT * FROM {$this->table}
+                    WHERE codigo_barras = :codigo AND activo = 0";
+            $params = ['codigo' => $codigo];
+
+            if ($nid !== null) {
+                $sql .= " AND negocio_id = :nid";
+                $params['nid'] = $nid;
+            }
+            $sql .= " LIMIT 1";
+
+            $row = $this->rawFirst($sql, $params);
+            return $row ?: null;
         }
 
         public function stockBajo(): array
@@ -283,9 +304,6 @@ if (!class_exists('Producto')) {
             });
         }
 
-        /**
-         * Estadísticas reales de ventas del producto (con descuentos y anulaciones).
-         */
         public function estadisticas(int $id): array
         {
             $nid = $this->nid();
@@ -320,6 +338,50 @@ if (!class_exists('Producto')) {
                 'primera_venta'     => $row['primera'] ?? null,
                 'ultima_venta'      => $row['ultima'] ?? null,
             ];
+        }
+
+        public function deletePermanente(int $id): array
+        {
+            $nid = $this->nid();
+
+            return $this->transaction(function (PDO $pdo) use ($id, $nid) {
+                $sql = "SELECT id FROM productos WHERE id = :id";
+                $params = ['id' => $id];
+                if ($nid !== null) {
+                    $sql .= " AND negocio_id = :nid";
+                    $params['nid'] = $nid;
+                }
+                $stmt = $pdo->prepare($sql);
+                $stmt->execute($params);
+                if ($stmt->fetch() === false) {
+                    throw new RuntimeException('Producto no encontrado.');
+                }
+
+                $chk = $pdo->prepare(
+                    "SELECT COUNT(*) FROM venta_detalle WHERE producto_id = :id"
+                );
+                $chk->execute(['id' => $id]);
+                $ventas = (int) $chk->fetchColumn();
+
+                if ($ventas > 0) {
+                    $upd = $pdo->prepare(
+                        "UPDATE productos SET activo = 0 WHERE id = :id"
+                    );
+                    $upd->execute(['id' => $id]);
+                    return ['accion' => 'desactivado'];
+                }
+
+                $pdo->prepare("DELETE FROM producto_imagenes WHERE producto_id = :id")
+                    ->execute(['id' => $id]);
+
+                $pdo->prepare("DELETE FROM movimientos_inventario WHERE producto_id = :id")
+                    ->execute(['id' => $id]);
+
+                $pdo->prepare("DELETE FROM productos WHERE id = :id")
+                    ->execute(['id' => $id]);
+
+                return ['accion' => 'eliminado'];
+            });
         }
     }
 }

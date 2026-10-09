@@ -5,6 +5,7 @@ require_once __DIR__ . '/../models/Usuario.php';
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../utils/Jwt.php';
 require_once __DIR__ . '/../core/Logger.php';
+require_once __DIR__ . '/../core/Auth.php';
 require_once __DIR__ . '/../core/Exceptions/UnauthorizedException.php';
 require_once __DIR__ . '/../core/Exceptions/ForbiddenException.php';
 require_once __DIR__ . '/../core/Exceptions/ConflictException.php';
@@ -192,6 +193,45 @@ if (!class_exists('AuthService')) {
                 throw new UnauthorizedException('Usuario no encontrado.');
             }
             return $usuario;
+        }
+
+        public function changePassword(int $userId, string $passwordActual, string $passwordNueva): array
+        {
+            $stmt = $this->db->prepare(
+                "SELECT id, password_hash FROM usuarios WHERE id = :id LIMIT 1"
+            );
+            $stmt->execute(['id' => $userId]);
+            $usuario = $stmt->fetch();
+
+            if ($usuario === false) {
+                throw new UnauthorizedException('Usuario no encontrado.');
+            }
+
+            if (!password_verify($passwordActual, (string) $usuario['password_hash'])) {
+                throw new BusinessException('La contraseña actual es incorrecta.');
+            }
+
+            if ($passwordActual === $passwordNueva) {
+                throw new BusinessException('La nueva contraseña debe ser distinta a la actual.');
+            }
+
+            if (mb_strlen($passwordNueva) < 8) {
+                throw new BusinessException('La nueva contraseña debe tener al menos 8 caracteres.');
+            }
+
+            $nuevoHash = password_hash($passwordNueva, PASSWORD_BCRYPT);
+
+            $upd = $this->db->prepare(
+                "UPDATE usuarios SET password_hash = :hash WHERE id = :id"
+            );
+            $upd->execute([
+                'hash' => $nuevoHash,
+                'id'   => $userId,
+            ]);
+
+            Logger::info('Contraseña cambiada', ['user_id' => $userId]);
+
+            return ['changed' => true];
         }
 
         private function crearConfiguracionDefault(int $negocioId, array $negocio): void

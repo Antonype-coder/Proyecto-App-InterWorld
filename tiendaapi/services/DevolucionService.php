@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../utils/FolioGenerator.php';
+require_once __DIR__ . '/../core/Auth.php';
 require_once __DIR__ . '/../core/Logger.php';
 require_once __DIR__ . '/../core/Exceptions/BusinessException.php';
 require_once __DIR__ . '/../core/Exceptions/NotFoundException.php';
@@ -17,9 +18,19 @@ if (!class_exists('DevolucionService')) {
             $this->db = Database::getConnection();
         }
 
+        private function nid(): ?int
+        {
+            return class_exists('Auth') ? Auth::negocioId() : null;
+        }
+
         public function crear(array $data, int $usuarioId): array
         {
-            return $this->transaction(function () use ($data, $usuarioId) {
+            $nid = $this->nid();
+            if ($nid === null) {
+                throw new BusinessException('No se pudo determinar el negocio.');
+            }
+
+            return $this->transaction(function () use ($data, $usuarioId, $nid) {
                 $ventaId = (int) ($data['venta_id'] ?? 0);
                 $motivo = trim((string) ($data['motivo'] ?? ''));
                 $metodo = (string) ($data['metodo_devolucion'] ?? 'efectivo');
@@ -30,8 +41,8 @@ if (!class_exists('DevolucionService')) {
                 if (!is_array($items) || $items === []) throw new BusinessException('Debes indicar al menos un producto.');
 
                 // Cargar venta
-                $stmt = $this->db->prepare("SELECT * FROM ventas WHERE id = :id FOR UPDATE");
-                $stmt->execute(['id' => $ventaId]);
+                $stmt = $this->db->prepare("SELECT * FROM ventas WHERE id = :id AND negocio_id = :nid FOR UPDATE");
+                $stmt->execute(['id' => $ventaId, 'nid' => $nid]);
                 $venta = $stmt->fetch();
                 if ($venta === false) throw new NotFoundException('Venta no encontrada.');
                 if ($venta['estado'] === 'anulada') throw new BusinessException('No puedes devolver productos de una venta anulada.');
@@ -47,10 +58,10 @@ if (!class_exists('DevolucionService')) {
                     "SELECT dd.producto_id, SUM(dd.cantidad) AS devuelto
                      FROM devolucion_detalle dd
                      INNER JOIN devoluciones d ON d.id = dd.devolucion_id
-                     WHERE d.venta_id = :id AND d.estado = 'completada'
+                     WHERE d.venta_id = :id AND d.estado = 'completada' AND d.negocio_id = :nid
                      GROUP BY dd.producto_id"
                 );
-                $stmt->execute(['id' => $ventaId]);
+                $stmt->execute(['id' => $ventaId, 'nid' => $nid]);
                 $yaDevueltos = [];
                 foreach ($stmt->fetchAll() ?: [] as $r) {
                     $yaDevueltos[(int)$r['producto_id']] = (int)$r['devuelto'];
@@ -64,45 +75,63 @@ if (!class_exists('DevolucionService')) {
                 // Validar items
                 $detallesNuevos = [];
                 $montoTotal = 0.0;
+
                 foreach ($items as $it) {
                     $pid = (int)($it['producto_id'] ?? 0);
                     $cant = (int)($it['cantidad'] ?? 0);
-                    if (!isset($mapaOriginales[$pid])) throw new BusinessException("Producto #{$pid} no está en la venta.");
+
+                    if (!isset($mapaOriginales[$pid])) {
+                        throw new BusinessException("Producto #{$pid} no está en la venta.");
+                    }
+
                     $orig = $mapaOriginales[$pid];
                     $maxDev = (int)$orig['cantidad'] - ($yaDevueltos[$pid] ?? 0);
+
                     if ($cant <= 0) throw new BusinessException('Cantidad inválida.');
                     if ($cant > $maxDev) throw new BusinessException("Cantidad máxima devolvible para este producto: {$maxDev}.");
 
-                    $precio = (float)$orig['precio_unitario'];
-                    $subtotal = round($precio * $cant, 2);
+                    // 🔥 Precio NETO real = (subtotal - descuento) / cantidad original
+                    // Refleja lo que REALMENTE se cobró con promos aplicadas.
+                    $cantOriginal  = (int)$orig['cantidad'];
+                    $subtotalOrig  = (float)$orig['subtotal'];
+                    $descuentoOrig = (float)($orig['descuento'] ?? 0);
+
+                    $precioNeto = $cantOriginal > 0
+                        ? ($subtotalOrig - $descuentoOrig) / $cantOriginal
+                        : (float)$orig['precio_unitario'];
+
+                    $precioNeto = round($precioNeto, 2);
+
+                    $subtotal = round($precioNeto * $cant, 2);
                     $montoTotal += $subtotal;
 
                     $detallesNuevos[] = [
-                        'producto_id' => $pid,
-                        'cantidad' => $cant,
-                        'precio_unitario' => $precio,
-                        'subtotal' => $subtotal,
+                        'producto_id'     => $pid,
+                        'cantidad'        => $cant,
+                        'precio_unitario' => $precioNeto,
+                        'subtotal'        => $subtotal,
                     ];
                 }
 
                 // Folio
-                $numero = FolioGenerator::devolucion($this->db);
+                $numero = FolioGenerator::devolucion($this->db, $nid);
 
                 // Insertar devolución
                 $ins = $this->db->prepare(
                     "INSERT INTO devoluciones
-                     (numero, venta_id, usuario_id, cliente_id, tipo, motivo, monto_devuelto, metodo_devolucion, estado)
-                     VALUES (:numero, :venta_id, :usuario_id, :cliente_id, :tipo, :motivo, :monto, :metodo, 'completada')"
+                     (negocio_id, numero, venta_id, usuario_id, cliente_id, tipo, motivo, monto_devuelto, metodo_devolucion, estado)
+                     VALUES (:nid, :numero, :venta_id, :usuario_id, :cliente_id, :tipo, :motivo, :monto, :metodo, 'completada')"
                 );
                 $ins->execute([
-                    'numero' => $numero,
-                    'venta_id' => $ventaId,
+                    'nid'        => $nid,
+                    'numero'     => $numero,
+                    'venta_id'   => $ventaId,
                     'usuario_id' => $usuarioId,
                     'cliente_id' => $venta['cliente_id'],
-                    'tipo' => count($detallesNuevos) === count($detallesOriginales) ? 'total' : 'parcial',
-                    'motivo' => $motivo,
-                    'monto' => number_format($montoTotal, 2, '.', ''),
-                    'metodo' => $metodo,
+                    'tipo'       => count($detallesNuevos) === count($detallesOriginales) ? 'total' : 'parcial',
+                    'motivo'     => $motivo,
+                    'monto'      => number_format($montoTotal, 2, '.', ''),
+                    'metodo'     => $metodo,
                 ]);
                 $devolucionId = (int)$this->db->lastInsertId();
 
@@ -112,57 +141,69 @@ if (!class_exists('DevolucionService')) {
                      (devolucion_id, producto_id, cantidad, precio_unitario, subtotal)
                      VALUES (:dev, :prod, :cant, :precio, :sub)"
                 );
-                $updStock = $this->db->prepare("UPDATE productos SET stock = stock + :cant WHERE id = :id");
-                $getStock = $this->db->prepare("SELECT stock FROM productos WHERE id = :id");
+                $updStock = $this->db->prepare("UPDATE productos SET stock = stock + :cant WHERE id = :id AND negocio_id = :nid");
+                $getStock = $this->db->prepare("SELECT stock FROM productos WHERE id = :id AND negocio_id = :nid");
                 $insMov = $this->db->prepare(
                     "INSERT INTO movimientos_inventario
-                     (producto_id, usuario_id, tipo, cantidad, stock_anterior, stock_nuevo, referencia_tipo, referencia_id, motivo)
-                     VALUES (:prod, :uid, 'entrada', :cant, :ant, :nuevo, 'devolucion', :ref, :motivo)"
+                     (negocio_id, producto_id, usuario_id, tipo, cantidad, stock_anterior, stock_nuevo, referencia_tipo, referencia_id, motivo)
+                     VALUES (:nid, :prod, :uid, 'entrada', :cant, :ant, :nuevo, 'devolucion', :ref, :motivo)"
                 );
 
                 foreach ($detallesNuevos as $d) {
                     $insDet->execute([
-                        'dev' => $devolucionId,
-                        'prod' => $d['producto_id'],
-                        'cant' => $d['cantidad'],
+                        'dev'    => $devolucionId,
+                        'prod'   => $d['producto_id'],
+                        'cant'   => $d['cantidad'],
                         'precio' => number_format($d['precio_unitario'], 2, '.', ''),
-                        'sub' => number_format($d['subtotal'], 2, '.', ''),
+                        'sub'    => number_format($d['subtotal'], 2, '.', ''),
                     ]);
 
-                    $getStock->execute(['id' => $d['producto_id']]);
+                    $getStock->execute(['id' => $d['producto_id'], 'nid' => $nid]);
                     $ant = (int)$getStock->fetchColumn();
                     $nuevo = $ant + $d['cantidad'];
-                    $updStock->execute(['cant' => $d['cantidad'], 'id' => $d['producto_id']]);
+
+                    $updStock->execute(['cant' => $d['cantidad'], 'id' => $d['producto_id'], 'nid' => $nid]);
                     $insMov->execute([
-                        'prod' => $d['producto_id'],
-                        'uid' => $usuarioId,
-                        'cant' => $d['cantidad'],
-                        'ant' => $ant,
-                        'nuevo' => $nuevo,
-                        'ref' => $devolucionId,
+                        'nid'    => $nid,
+                        'prod'   => $d['producto_id'],
+                        'uid'    => $usuarioId,
+                        'cant'   => $d['cantidad'],
+                        'ant'    => $ant,
+                        'nuevo'  => $nuevo,
+                        'ref'    => $devolucionId,
                         'motivo' => "Devolución {$numero}: {$motivo}",
                     ]);
                 }
 
                 // Si la venta fue a crédito, reducir la deuda del cliente
                 if ($venta['tipo_pago'] === 'credito' && $venta['cliente_id']) {
-                    $sel = $this->db->prepare("SELECT saldo_deuda FROM clientes WHERE id = :id FOR UPDATE");
-                    $sel->execute(['id' => $venta['cliente_id']]);
+                    $sel = $this->db->prepare("SELECT saldo_deuda FROM clientes WHERE id = :id AND negocio_id = :nid FOR UPDATE");
+                    $sel->execute(['id' => $venta['cliente_id'], 'nid' => $nid]);
                     $row = $sel->fetch();
                     if ($row !== false) {
                         $nueva = max(0, round((float)$row['saldo_deuda'] - $montoTotal, 2));
-                        $upd = $this->db->prepare("UPDATE clientes SET saldo_deuda = :s WHERE id = :id");
-                        $upd->execute(['s' => number_format($nueva, 2, '.', ''), 'id' => $venta['cliente_id']]);
+                        $upd = $this->db->prepare("UPDATE clientes SET saldo_deuda = :s WHERE id = :id AND negocio_id = :nid");
+                        $upd->execute([
+                            's'   => number_format($nueva, 2, '.', ''),
+                            'id'  => $venta['cliente_id'],
+                            'nid' => $nid,
+                        ]);
                     }
                 }
 
-                Logger::info('Devolución registrada', ['devolucion_id' => $devolucionId, 'monto' => $montoTotal]);
+                Logger::info('Devolución registrada', [
+                    'devolucion_id' => $devolucionId,
+                    'monto'         => $montoTotal,
+                ]);
+
                 return $this->obtener($devolucionId);
             });
         }
 
         public function listar(array $filtros = [], int $limit = 50, int $offset = 0): array
         {
+            $nid = $this->nid();
+
             $sql = "SELECT d.*, v.numero AS venta_numero, u.nombre AS usuario_nombre,
                            c.nombre AS cliente_nombre
                     FROM devoluciones d
@@ -172,6 +213,10 @@ if (!class_exists('DevolucionService')) {
                     WHERE 1=1";
             $params = [];
 
+            if ($nid !== null) {
+                $sql .= " AND d.negocio_id = :nid";
+                $params['nid'] = $nid;
+            }
             if (!empty($filtros['estado'])) {
                 $sql .= " AND d.estado = :estado";
                 $params['estado'] = $filtros['estado'];
@@ -194,16 +239,25 @@ if (!class_exists('DevolucionService')) {
 
         public function obtener(int $id): array
         {
-            $stmt = $this->db->prepare(
-                "SELECT d.*, v.numero AS venta_numero, v.tipo_pago,
-                        u.nombre AS usuario_nombre, c.nombre AS cliente_nombre
-                 FROM devoluciones d
-                 INNER JOIN ventas v ON v.id = d.venta_id
-                 INNER JOIN usuarios u ON u.id = d.usuario_id
-                 LEFT JOIN clientes c ON c.id = d.cliente_id
-                 WHERE d.id = :id LIMIT 1"
-            );
-            $stmt->execute(['id' => $id]);
+            $nid = $this->nid();
+
+            $sql = "SELECT d.*, v.numero AS venta_numero, v.tipo_pago,
+                           u.nombre AS usuario_nombre, c.nombre AS cliente_nombre
+                    FROM devoluciones d
+                    INNER JOIN ventas v ON v.id = d.venta_id
+                    INNER JOIN usuarios u ON u.id = d.usuario_id
+                    LEFT JOIN clientes c ON c.id = d.cliente_id
+                    WHERE d.id = :id";
+            $params = ['id' => $id];
+
+            if ($nid !== null) {
+                $sql .= " AND d.negocio_id = :nid";
+                $params['nid'] = $nid;
+            }
+            $sql .= " LIMIT 1";
+
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute($params);
             $dev = $stmt->fetch();
             if ($dev === false) throw new NotFoundException('Devolución no encontrada.');
 

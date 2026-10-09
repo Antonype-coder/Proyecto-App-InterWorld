@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as Updates from 'expo-updates';
 
 import { authApi, setUnauthorizedHandler } from '@api/index';
 import {
@@ -7,6 +8,9 @@ import {
   STORAGE_USER_KEY,
   STORAGE_ONBOARDING_KEY,
 } from '@utils/constants';
+import { useProductosStore } from '@store/productosStore';
+import { useClientesStore } from '@store/clientesStore';
+import { useCarritoStore } from '@store/carritoStore';
 import type { RegisterNegocioRequest, Usuario } from '@tipos/index';
 
 interface AuthState {
@@ -24,6 +28,55 @@ interface AuthState {
   updateUser: (user: Usuario) => void;
 }
 
+async function resetAllDataStores(): Promise<void> {
+  try {
+    // Productos
+    useProductosStore.setState({
+      productos: [],
+      categorias: [],
+      total: 0,
+      error: null,
+      loading: false,
+    });
+
+    // Clientes
+    useClientesStore.setState({
+      clientes: [],
+      loading: false,
+      error: null,
+    });
+
+    // Carrito
+    useCarritoStore.getState().limpiar();
+  } catch {
+    // Ignorar
+  }
+
+  // Limpiar caché de AsyncStorage
+  try {
+    const allKeys = await AsyncStorage.getAllKeys();
+    const tenantKeys = allKeys.filter(
+      (k) =>
+        k.startsWith('@tiendaadmin:') ||
+        k.startsWith('@interworld:productos') ||
+        k.startsWith('@interworld:clientes'),
+    );
+    if (tenantKeys.length > 0) {
+      await AsyncStorage.multiRemove(tenantKeys);
+    }
+  } catch {
+    // Ignorar
+  }
+}
+
+async function reloadApp(): Promise<void> {
+  try {
+    await Updates.reloadAsync();
+  } catch {
+    // Ignorar en dev
+  }
+}
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   token: null,
@@ -35,6 +88,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ loading: true, error: null });
     try {
       const res = await authApi.login({ email, password });
+
+      const prevId = get().user?.id ?? null;
+      const nextId = res.user?.id ?? null;
+      if (prevId !== nextId) {
+        await resetAllDataStores();
+      }
 
       await AsyncStorage.multiSet([
         [STORAGE_TOKEN_KEY, res.token],
@@ -67,6 +126,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       const res = await authApi.registrarNegocio(data);
 
+      await resetAllDataStores();
+
       await AsyncStorage.multiSet([
         [STORAGE_TOKEN_KEY, res.token],
         [STORAGE_USER_KEY, JSON.stringify(res.user)],
@@ -98,14 +159,20 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     try {
       await authApi.logout();
     } catch {
-      // Ignorar errores de red al cerrar sesión
+      // Ignorar
     }
+
+    await resetAllDataStores();
+
     await AsyncStorage.multiRemove([
       STORAGE_TOKEN_KEY,
       STORAGE_USER_KEY,
       STORAGE_ONBOARDING_KEY,
     ]);
+
     set({ user: null, token: null, error: null });
+
+    await reloadApp();
   },
 
   loadFromStorage: async () => {
@@ -127,7 +194,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
             JSON.stringify(refreshed),
           );
         } catch {
-          // El interceptor 401 ya limpió el storage
+          // Ignorar
         }
       } else {
         set({ initialized: true });
@@ -145,6 +212,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 }));
 
-setUnauthorizedHandler(() => {
+setUnauthorizedHandler(async () => {
+  await resetAllDataStores();
   useAuthStore.setState({ user: null, token: null });
+  await reloadApp();
 });
