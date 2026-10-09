@@ -32,7 +32,11 @@ import AppHeader from '@components/layout/AppHeader';
 import KpiHeroCard from '@components/ui/KpiHeroCard';
 import StatCard from '@components/ui/StatCard';
 import { LineChartCard, BarChartCard, DonutChartCard } from '@components/charts';
-import { StaggeredSection, ShineEffect, FadeInItem } from '@components/animations';
+import {
+  StaggeredSection,
+  ShineEffect,
+  FadeInItem,
+} from '@components/animations';
 import OnboardingBanner from '@components/domain/OnboardingBanner';
 
 const PERIODOS: { value: DashboardPeriodo; label: string }[] = [
@@ -65,7 +69,6 @@ export default function DashboardScreen(): React.ReactElement {
       setData(res);
     } catch (e) {
       const mensaje = e instanceof Error ? e.message : 'Error al cargar';
-      // Solo mostramos error si NO hay datos previos
       if (!data) setError(mensaje);
     } finally {
       setLoading(false);
@@ -74,7 +77,6 @@ export default function DashboardScreen(): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [periodo]);
 
-  // ⚡ Carga optimizada: solo muestra skeleton la primera vez
   useFocusedLoad(cargar, () => setLoading(true));
 
   const onRefresh = async (): Promise<void> => {
@@ -164,7 +166,24 @@ export default function DashboardScreen(): React.ReactElement {
         ) : data ? (
           <>
             {/* ============ ONBOARDING TIENDA NUEVA ============ */}
-            {data.top_productos.length === 0 && data.ultimas_ventas.length === 0 && !data.caja_abierta ? ( <StaggeredSection delay={40}> <View style={styles.section}> <OnboardingBanner onConfigurar={() => goTo('Mas', 'Configuracion')} onCrearCategoria={() => goTo('Mas', 'Categorias')} onCrearProducto={() => navigation.navigate('Productos', { screen: 'ProductoForm', }) } onVender={() => navigation.navigate('Vender')} /> </View> </StaggeredSection> ) : null}
+            {data.top_productos.length === 0 &&
+            data.ultimas_ventas.length === 0 &&
+            !data.caja_abierta ? (
+              <StaggeredSection delay={40}>
+                <View style={styles.section}>
+                  <OnboardingBanner
+                    onConfigurar={() => goTo('Mas', 'Configuracion')}
+                    onCrearCategoria={() => goTo('Mas', 'Categorias')}
+                    onCrearProducto={() =>
+                      navigation.navigate('Productos', {
+                        screen: 'ProductoForm',
+                      })
+                    }
+                    onVender={() => navigation.navigate('Vender')}
+                  />
+                </View>
+              </StaggeredSection>
+            ) : null}
 
             {/* ============ KPI HERO ============ */}
             <StaggeredSection delay={80}>
@@ -174,10 +193,13 @@ export default function DashboardScreen(): React.ReactElement {
                     label="Vendido en el período"
                     value={totalPeriodo}
                     formatValue={(v) => formatCurrency(v)}
-                    subtitle={`${data.kpis.ventas_periodo.actual.cantidad} transacciones · Ticket ${formatCurrency(data.kpis.ticket_promedio.valor)}`}
+                    subtitle={`${data.kpis.ventas_periodo.actual.cantidad} transacciones · Ticket ${formatCurrency(
+                      data.kpis.ticket_promedio.valor,
+                    )}`}
                     trend={{
                       direction: data.kpis.ventas_periodo.cambio.direccion,
-                      percentage: data.kpis.ventas_periodo.cambio.porcentaje,
+                      percentage:
+                        data.kpis.ventas_periodo.cambio.porcentaje,
                     }}
                     sparkData={sparkData}
                     sparkColor={chartColors.primary}
@@ -189,7 +211,9 @@ export default function DashboardScreen(): React.ReactElement {
             {/* ============ GRID DE STATS ============ */}
             <StaggeredSection delay={160}>
               <View style={styles.section}>
-                <Text style={[styles.sectionLabel, { color: colors.textMuted }]}>
+                <Text
+                  style={[styles.sectionLabel, { color: colors.textMuted }]}
+                >
                   RESUMEN
                 </Text>
 
@@ -378,7 +402,8 @@ export default function DashboardScreen(): React.ReactElement {
                   data={data.metodos_pago.map((m, idx) => ({
                     label: m.label,
                     value: parseFloat(m.monto) || 0,
-                    color: chartColors.series[idx % chartColors.series.length],
+                    color:
+                      chartColors.series[idx % chartColors.series.length],
                   }))}
                   centerColor={chartColors.plum}
                 />
@@ -460,7 +485,10 @@ export default function DashboardScreen(): React.ReactElement {
                             ]}
                           >
                             <View
-                              style={[styles.rank, { backgroundColor: rankBg }]}
+                              style={[
+                                styles.rank,
+                                { backgroundColor: rankBg },
+                              ]}
                             >
                               <Text
                                 style={[
