@@ -1,4 +1,3 @@
-::: {align="center"}
 # InterWorld
 
 **Gestión comercial, punto de venta e inventario en una sola
