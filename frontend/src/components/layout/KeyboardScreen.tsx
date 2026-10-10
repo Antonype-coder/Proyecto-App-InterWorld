@@ -46,8 +46,10 @@ export default function KeyboardScreen({
     ? spacing.md
     : insets.bottom + TAB_BAR_HEIGHT + spacing.md;
 
+  // Padding inferior generoso cuando no hay footer, para que el último
+  // input nunca quede pegado al borde inferior.
   const scrollBottomPadding = footer
-    ? spacing.lg
+    ? spacing.xxl
     : insets.bottom + TAB_BAR_HEIGHT + spacing.giant;
 
   const content = scrollable ? (
@@ -59,7 +61,13 @@ export default function KeyboardScreen({
         contentContainerStyle,
       ]}
       keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
       showsVerticalScrollIndicator={false}
+      // iOS 13+: ajusta automáticamente los insets cuando el teclado aparece.
+      // Esto hace scroll interno para que el input activo quede visible.
+      automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+      // Evita conflictos con SafeAreaView de arriba.
+      contentInsetAdjustmentBehavior="never"
     >
       {children}
     </ScrollView>
@@ -75,7 +83,10 @@ export default function KeyboardScreen({
       <KeyboardAvoidingView
         style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={insets.top}
+        // iOS: compensa el safe area top (el KeyboardAvoidingView está
+        // dentro del SafeAreaView, no en el root).
+        // Android: con softwareKeyboardLayoutMode=resize no hace falta offset.
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
       >
         {header}
         {content}

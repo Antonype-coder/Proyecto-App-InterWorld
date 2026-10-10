@@ -43,28 +43,51 @@ export default function ConfiguracionScreen(): React.ReactElement {
   const [saving, setSaving] = useState(false);
   const [savingLogo, setSavingLogo] = useState(false);
 
-  const [toast, setToast] = useState<{ visible: boolean; message: string; variant: ToastVariant }>({
-    visible: false, message: '', variant: 'info',
-  });
+  const [toast, setToast] = useState<{
+    visible: boolean;
+    message: string;
+    variant: ToastVariant;
+  }>({ visible: false, message: '', variant: 'info' });
 
-  const logoValue = data?.negocio?.logo_url ?? data?.general?.logo_url;
-  const logoPath = typeof logoValue === 'string' && logoValue.trim() ? logoValue : null;
+  // El logo puede venir del grupo negocio o general (por datos viejos)
+  const logoValue =
+    (data as any)?.negocio?.logo_url ??
+    (data as any)?.general?.logo_url;
+  const logoPath =
+    typeof logoValue === 'string' && logoValue.trim() ? logoValue : null;
 
-  const cargarDatos = useCallback(async (): Promise<void> => { await cargar(); }, [cargar]);
-  useEffect(() => { void cargarDatos(); }, [cargarDatos]);
+  const cargarDatos = useCallback(async (): Promise<void> => {
+    await cargar();
+  }, [cargar]);
 
   useEffect(() => {
-    if (data) {
-      const neg = data.negocio ?? {};
-      const imp = data.impuestos ?? {};
-      setNegocioNombre(String(neg.negocio_nombre ?? ''));
-      setNegocioNit(String(neg.negocio_nit ?? ''));
-      setNegocioTelefono(String(neg.negocio_telefono ?? ''));
-      setNegocioDireccion(String(neg.negocio_direccion ?? ''));
-      setNegocioEmail(String(neg.negocio_email ?? ''));
-      setImpuesto(String(imp.impuesto_porcentaje ?? '0'));
-      setImpuestoIncluido(Boolean(imp.impuesto_incluido ?? true));
-    }
+    void cargarDatos();
+  }, [cargarDatos]);
+
+  // 🔥 Leer de AMBOS grupos (negocio y general) por compatibilidad
+  useEffect(() => {
+    if (!data) return;
+
+    const d = data as any;
+    const neg = d.negocio ?? {};
+    const gen = d.general ?? {};
+    const imp = d.impuestos ?? {};
+
+    const pick = (clave: string, fallback = '') =>
+      neg[clave] ?? gen[clave] ?? fallback;
+
+    setNegocioNombre(String(pick('negocio_nombre', '')));
+    setNegocioNit(String(pick('negocio_nit', '')));
+    setNegocioTelefono(String(pick('negocio_telefono', '')));
+    setNegocioDireccion(String(pick('negocio_direccion', '')));
+    setNegocioEmail(String(pick('negocio_email', '')));
+
+    setImpuesto(String(imp.impuesto_porcentaje ?? '0'));
+    setImpuestoIncluido(
+      imp.impuesto_incluido === undefined
+        ? true
+        : Boolean(imp.impuesto_incluido),
+    );
   }, [data]);
 
   const guardar = async (): Promise<void> => {
@@ -79,24 +102,37 @@ export default function ConfiguracionScreen(): React.ReactElement {
         impuesto_porcentaje: impuesto,
         impuesto_incluido: impuestoIncluido ? '1' : '0',
       });
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setToast({ visible: true, message: 'Configuración guardada', variant: 'success' });
+      await Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      );
+      setToast({
+        visible: true,
+        message: 'Configuración guardada',
+        variant: 'success',
+      });
     } catch (e) {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       const msg = e instanceof Error ? e.message : 'Error al guardar';
       setToast({ visible: true, message: msg, variant: 'error' });
-    } finally { setSaving(false); }
+    } finally {
+      setSaving(false);
+    }
   };
 
   const seleccionarLogo = async (): Promise<void> => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'], allowsEditing: true, aspect: [1, 1], quality: 0.85,
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.85,
       });
       if (result.canceled) return;
+
       const asset = result.assets[0];
       const mimeType = asset.mimeType ?? 'image/jpeg';
       const extension = mimeType.split('/')[1] ?? 'jpg';
+
       setSavingLogo(true);
       const uploaded = await uploadsApi.imagenLogo({
         uri: asset.uri,
@@ -104,33 +140,62 @@ export default function ConfiguracionScreen(): React.ReactElement {
         type: mimeType,
       });
       await actualizarLogo(uploaded.path);
-      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setToast({ visible: true, message: 'Logo actualizado en la app y los informes.', variant: 'success' });
+      await Haptics.notificationAsync(
+        Haptics.NotificationFeedbackType.Success,
+      );
+      setToast({
+        visible: true,
+        message: 'Logo actualizado en la app y los informes.',
+        variant: 'success',
+      });
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'No se pudo guardar el logo.';
+      const message =
+        e instanceof Error ? e.message : 'No se pudo guardar el logo.';
       setToast({ visible: true, message, variant: 'error' });
-    } finally { setSavingLogo(false); }
+    } finally {
+      setSavingLogo(false);
+    }
   };
 
   const confirmarQuitarLogo = (): void => {
-    Alert.alert('Quitar logo', 'Se quitará el logo del negocio de las pantallas y los informes.', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Quitar', style: 'destructive', onPress: async () => {
-        setSavingLogo(true);
-        try {
-          await eliminarLogo();
-          setToast({ visible: true, message: 'Logo eliminado.', variant: 'success' });
-        } catch (e) {
-          const message = e instanceof Error ? e.message : 'No se pudo quitar el logo.';
-          setToast({ visible: true, message, variant: 'error' });
-        } finally { setSavingLogo(false); }
-      } },
-    ]);
+    Alert.alert(
+      'Quitar logo',
+      'Se quitará el logo del negocio de las pantallas y los informes.',
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        {
+          text: 'Quitar',
+          style: 'destructive',
+          onPress: async () => {
+            setSavingLogo(true);
+            try {
+              await eliminarLogo();
+              setToast({
+                visible: true,
+                message: 'Logo eliminado.',
+                variant: 'success',
+              });
+            } catch (e) {
+              const message =
+                e instanceof Error
+                  ? e.message
+                  : 'No se pudo quitar el logo.';
+              setToast({ visible: true, message, variant: 'error' });
+            } finally {
+              setSavingLogo(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   if (loading && !data) {
     return (
-      <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]} edges={['top']}>
+      <SafeAreaView
+        style={[styles.safe, { backgroundColor: colors.bg }]}
+        edges={['top']}
+      >
         <TopBar title="Configuración" onBack={() => navigation.goBack()} />
         <Loader message="Cargando configuración" />
       </SafeAreaView>
@@ -138,20 +203,47 @@ export default function ConfiguracionScreen(): React.ReactElement {
   }
 
   return (
-    <SafeAreaView style={[styles.safe, { backgroundColor: colors.bg }]} edges={['top']}>
+    <SafeAreaView
+      style={[styles.safe, { backgroundColor: colors.bg }]}
+      edges={['top']}
+    >
       <TopBar title="Configuración" onBack={() => navigation.goBack()} />
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        showsVerticalScrollIndicator={false}
+      >
         <Card variant="default" style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Logo del negocio</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>
+            Logo del negocio
+          </Text>
           <View style={styles.logoRow}>
-            <View style={[styles.logoPreview, { borderColor: colors.border, backgroundColor: colors.bgSubtle }]}>
+            <View
+              style={[
+                styles.logoPreview,
+                {
+                  borderColor: colors.border,
+                  backgroundColor: colors.bgSubtle,
+                },
+              ]}
+            >
               {logoPath ? (
-                <Image source={{ uri: getImageUrl(logoPath) ?? undefined }} style={styles.logoImage} contentFit="contain" cachePolicy="disk" />
+                <Image
+                  source={{ uri: getImageUrl(logoPath) ?? undefined }}
+                  style={styles.logoImage}
+                  contentFit="contain"
+                  cachePolicy="disk"
+                />
               ) : (
-                <MaterialCommunityIcons name="storefront-outline" size={30} color={colors.textMuted} />
+                <MaterialCommunityIcons
+                  name="storefront-outline"
+                  size={30}
+                  color={colors.textMuted}
+                />
               )}
             </View>
-            <Text style={[styles.logoHint, { color: colors.textSecondary }]}>
+            <Text
+              style={[styles.logoHint, { color: colors.textSecondary }]}
+            >
               Aparecerá en las pantallas y en los informes PDF.
             </Text>
           </View>
@@ -166,44 +258,117 @@ export default function ConfiguracionScreen(): React.ReactElement {
               style={styles.logoButton}
             />
             {logoPath ? (
-              <Button label="Quitar" icon="delete-outline" onPress={confirmarQuitarLogo} disabled={savingLogo} variant="ghost" style={styles.logoButton} />
+              <Button
+                label="Quitar"
+                icon="delete-outline"
+                onPress={confirmarQuitarLogo}
+                disabled={savingLogo}
+                variant="ghost"
+                style={styles.logoButton}
+              />
             ) : null}
           </View>
         </Card>
 
         {esAdmin ? (
           <Card variant="default" style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Datos del negocio</Text>
-            <Input label="Nombre" icon="storefront-outline" value={negocioNombre} onChangeText={setNegocioNombre} />
-            <Input label="NIT" icon="card-account-details-outline" value={negocioNit} onChangeText={setNegocioNit} />
-            <Input label="Teléfono" icon="phone-outline" keyboardType="phone-pad" value={negocioTelefono} onChangeText={setNegocioTelefono} />
-            <Input label="Dirección" icon="map-marker-outline" value={negocioDireccion} onChangeText={setNegocioDireccion} />
-            <Input label="Correo" icon="email-outline" keyboardType="email-address" autoCapitalize="none" value={negocioEmail} onChangeText={setNegocioEmail} />
+            <Text
+              style={[styles.sectionTitle, { color: colors.textPrimary }]}
+            >
+              Datos del negocio
+            </Text>
+            <Input
+              label="Nombre"
+              icon="storefront-outline"
+              value={negocioNombre}
+              onChangeText={setNegocioNombre}
+            />
+            <Input
+              label="NIT"
+              icon="card-account-details-outline"
+              value={negocioNit}
+              onChangeText={setNegocioNit}
+            />
+            <Input
+              label="Teléfono"
+              icon="phone-outline"
+              keyboardType="phone-pad"
+              value={negocioTelefono}
+              onChangeText={setNegocioTelefono}
+            />
+            <Input
+              label="Dirección"
+              icon="map-marker-outline"
+              value={negocioDireccion}
+              onChangeText={setNegocioDireccion}
+            />
+            <Input
+              label="Correo"
+              icon="email-outline"
+              keyboardType="email-address"
+              autoCapitalize="none"
+              value={negocioEmail}
+              onChangeText={setNegocioEmail}
+            />
           </Card>
         ) : null}
 
         {esAdmin ? (
           <Card variant="default" style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.textPrimary }]}>Impuestos</Text>
-            <FormattedNumberInput label="Porcentaje de impuesto" icon="percent-outline" value={impuesto} onChangeText={setImpuesto} />
+            <Text
+              style={[styles.sectionTitle, { color: colors.textPrimary }]}
+            >
+              Impuestos
+            </Text>
+            <FormattedNumberInput
+              label="Porcentaje de impuesto"
+              icon="percent-outline"
+              value={impuesto}
+              onChangeText={setImpuesto}
+            />
             <View style={styles.switchRow}>
               <View style={{ flex: 1 }}>
-                <Text style={[styles.switchLabel, { color: colors.textPrimary }]}>Precios incluyen impuesto</Text>
-                <Text style={[styles.switchHelper, { color: colors.textMuted }]}>
+                <Text
+                  style={[
+                    styles.switchLabel,
+                    { color: colors.textPrimary },
+                  ]}
+                >
+                  Precios incluyen impuesto
+                </Text>
+                <Text
+                  style={[styles.switchHelper, { color: colors.textMuted }]}
+                >
                   Los precios de venta ya incluyen el impuesto
                 </Text>
               </View>
-              <Switch value={impuestoIncluido} onValueChange={setImpuestoIncluido} />
+              <Switch
+                value={impuestoIncluido}
+                onValueChange={setImpuestoIncluido}
+              />
             </View>
           </Card>
         ) : null}
 
         {esAdmin ? (
-          <Button label="Guardar cambios" onPress={guardar} loading={saving} disabled={saving} variant="primary" size="lg" fullWidth />
+          <Button
+            label="Guardar cambios"
+            onPress={guardar}
+            loading={saving}
+            disabled={saving}
+            variant="primary"
+            size="lg"
+            fullWidth
+          />
         ) : null}
       </ScrollView>
 
-      <Toast visible={toast.visible} message={toast.message} variant={toast.variant} onHide={() => setToast((t) => ({ ...t, visible: false }))} />
+      <Toast
+        visible={toast.visible}
+        message={toast.message}
+        variant={toast.variant}
+        onHide={() => setToast((t) => ({ ...t, visible: false }))}
+      />
     </SafeAreaView>
   );
 }
@@ -212,17 +377,32 @@ const styles = StyleSheet.create({
   safe: { flex: 1 },
   scroll: { padding: spacing.lg, paddingBottom: spacing.giant },
   section: { marginBottom: spacing.md },
-  logoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
+  logoRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
   logoPreview: {
-    width: 84, height: 84, borderRadius: radius.md, borderWidth: 1,
-    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+    width: 84,
+    height: 84,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
   logoImage: { width: '100%', height: '100%' },
   logoHint: { ...typography.small, flex: 1 },
   logoActions: { flexDirection: 'row', gap: spacing.sm },
   logoButton: { flex: 1 },
   sectionTitle: { ...typography.h3, marginBottom: spacing.lg },
-  switchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
+  switchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+  },
   switchLabel: { ...typography.bodyBold },
   switchHelper: { ...typography.small, marginTop: 2 },
 });

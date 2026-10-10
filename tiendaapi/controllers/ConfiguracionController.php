@@ -11,6 +11,18 @@ if (!class_exists('ConfiguracionController')) {
     {
         private Configuracion $config;
 
+        // Mapa de prefijo → grupo de la tabla `configuracion`
+        private const GRUPO_POR_PREFIJO = [
+            'negocio_'      => 'negocio',
+            'impuesto_'     => 'impuestos',
+            'moneda_'       => 'moneda',
+            'notif_'        => 'notificaciones',
+            'stock_alerta_' => 'notificaciones',
+            'folio_'        => 'folios',
+            'tema_'         => 'apariencia',
+            'caja_'         => 'caja',
+        ];
+
         public function __construct()
         {
             $this->config = new Configuracion();
@@ -30,12 +42,37 @@ if (!class_exists('ConfiguracionController')) {
 
             foreach ($data as $clave => $valor) {
                 if (!is_string($clave) || $clave === '') continue;
-                if (is_array($valor)) {
-                    $valor = json_encode($valor, JSON_UNESCAPED_UNICODE);
-                } elseif (is_bool($valor)) {
-                    $valor = $valor ? '1' : '0';
+
+                // 1. Detectar grupo por prefijo
+                $grupo = 'general';
+                foreach (self::GRUPO_POR_PREFIJO as $prefijo => $g) {
+                    if (str_starts_with($clave, $prefijo)) {
+                        $grupo = $g;
+                        break;
+                    }
                 }
-                $this->config->set($clave, $valor);
+
+                // 2. Detectar tipo y normalizar valor
+                $tipo = 'string';
+
+                if (is_bool($valor)) {
+                    $tipo = 'boolean';
+                    $valor = $valor ? '1' : '0';
+                } elseif (is_int($valor)) {
+                    $tipo = 'integer';
+                } elseif (is_float($valor)) {
+                    $tipo = 'decimal';
+                } elseif (is_array($valor)) {
+                    $tipo = 'json';
+                    $valor = json_encode($valor, JSON_UNESCAPED_UNICODE);
+                } elseif (is_string($valor)) {
+                    // Si viene '0'/'1' desde el frontend, marcamos como boolean
+                    if (in_array($clave, ['impuesto_incluido', 'stock_alerta_habilitada', 'notif_stock_bajo', 'notif_ventas_dia', 'notif_deudas_vencidas'], true)) {
+                        $tipo = 'boolean';
+                    }
+                }
+
+                $this->config->set($clave, $valor, $tipo, $grupo);
             }
 
             Response::success($this->config->allByGroup(), 'Configuración actualizada.');
@@ -50,7 +87,8 @@ if (!class_exists('ConfiguracionController')) {
             }
 
             $previous = $this->config->get('logo_url');
-            $this->config->set('logo_url', $path, 'negocio');
+            $this->config->set('logo_url', $path, 'string', 'negocio');
+
             if (
                 is_string($previous)
                 && $previous !== ''
@@ -66,7 +104,8 @@ if (!class_exists('ConfiguracionController')) {
         public function deleteLogo(Request $request): void
         {
             $previous = $this->config->get('logo_url');
-            $this->config->set('logo_url', '', 'negocio');
+            $this->config->set('logo_url', '', 'string', 'negocio');
+
             if (is_string($previous) && $previous !== '' && $this->esLogoValido($previous)) {
                 Upload::delete($previous);
             }
@@ -82,6 +121,7 @@ if (!class_exists('ConfiguracionController')) {
 
             $logoDirectory = realpath(dirname(__DIR__) . '/storage/uploads/logo');
             $logoPath = realpath(dirname(__DIR__) . '/' . $path);
+
             return $logoDirectory !== false
                 && $logoPath !== false
                 && is_file($logoPath)
